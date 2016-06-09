@@ -15,6 +15,7 @@ dependencies {
     compile group: 'org.encog', name: 'encog-core', version: '3.3.0'
 
     compile group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.6'
+
     testCompile 'junit:junit:4.12'
 }
 
