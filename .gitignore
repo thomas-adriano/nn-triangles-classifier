@@ -2,5 +2,7 @@
 bin/
 .idea/
 .settings/
+build/
 .classpath
 .project
+classifier.log

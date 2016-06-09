@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+	<Properties>
+		<Property name="layout">%d{HH:mm:ss.SSS} %-5level %logger{2} - %msg%n</Property>
+	</Properties>
+	<Appenders>
+		<Console name="Console">
+			<PatternLayout pattern="${layout}" />
+		</Console>
+
+		<File name="fileWriter" fileName="classifier.log" append="false">
+			<PatternLayout pattern="${layout}" />
+		</File>
+	</Appenders>
+	<Loggers>
+		<Root level="ALL">
+			<AppenderRef ref="Console" />
+			<AppenderRef ref="fileWriter" />
+		</Root>
+	</Loggers>
+</Configuration>
