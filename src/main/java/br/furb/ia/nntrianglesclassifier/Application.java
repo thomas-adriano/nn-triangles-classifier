@@ -4,12 +4,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-// - A pasta main/java/resources/images contém as imagens exemplo origem. Qualquer adição deve ser armazenada neste diretorio.
+// - A pasta main/java/resources/images contém as imagens exemplo origem. Para adicionar novas imagens basta copiá-las
+//para o subdiretorio respectivo (equilateral, etc..).
 // - A pasta main/java/resources/processedImages contém as imagens origem processadas para facilitar o entendimento do que
 //acontece no processamento delas. Para criar mais deve-se usar o metodo ImageProcessor.saveImages();
 
@@ -20,7 +18,39 @@ import java.util.Map;
 public class Application {
     private static final Logger LOGGER = LogManager.getLogger();
     public static final File IMAGES_OUTPUT_DIR = new File("src/main/resources/processedImages");
+    public static final File EQUILATERAL_TRIANGLES_OUTPUT_DIR = new File(IMAGES_OUTPUT_DIR, "equilateral");
+    public static final File SCALENE_TRIANGLES_OUTPUT_DIR = new File(IMAGES_OUTPUT_DIR, "scalene");
+    public static final File ISOSCELES_TRIANGLES_OUTPUT_DIR = new File(IMAGES_OUTPUT_DIR, "isosceles");
     public static final String IMAGES_PATH = "/images";
+    public static final String EQUILATERAL_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/equilateral";
+    public static final String ISOSCELES_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/isosceles";
+    public static final String SCALENE_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/scalene";
+
+    public static final File getTriangleImageOutputDirByType(TriangleTypes t) {
+        switch (t) {
+            case EQUILATERAL:
+                return EQUILATERAL_TRIANGLES_OUTPUT_DIR;
+            case ISOSCELES:
+                return ISOSCELES_TRIANGLES_OUTPUT_DIR;
+            case SCALENE:
+                return SCALENE_TRIANGLES_OUTPUT_DIR;
+            default:
+                return null;
+        }
+    }
+
+    public static final String getTriangleImageOriginDirByType(TriangleTypes t) {
+        switch (t) {
+            case EQUILATERAL:
+                return EQUILATERAL_TRIANGLES_IMAGE_PATH;
+            case ISOSCELES:
+                return ISOSCELES_TRIANGLES_IMAGE_PATH;
+            case SCALENE:
+                return SCALENE_TRIANGLES_IMAGE_PATH;
+            default:
+                return null;
+        }
+    }
 
     public static void main(String[] args) {
         long init = System.currentTimeMillis();
@@ -28,8 +58,8 @@ public class Application {
 
         Map<TriangleTypes, List<BBox>> trainingData = loadTrainingData();
 
-//        NeuralNetwork nn = new NeuralNetwork();
-//        nn.doTheMagic(ip.getImagePixelArray());
+        NeuralNetwork nn = new NeuralNetwork();
+        nn.doTheMagic(trainingData);
 
 
         double elapsed = (System.currentTimeMillis() - init) / 1000;
@@ -43,9 +73,9 @@ public class Application {
         List<File> isoTriangles = new ArrayList<>();
         List<File> scaTriangles = new ArrayList<>();
 
-        eqTriangles.add(ResourceLoader.getResource(IMAGES_PATH + "/equilateral_1_28x28.jpg"));
-        isoTriangles.add(ResourceLoader.getResource(IMAGES_PATH + "/isosceles_1_28x28.jpg"));
-        scaTriangles.add(ResourceLoader.getResource(IMAGES_PATH + "/scalene_1_28x28.jpg"));
+        eqTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.EQUILATERAL))));
+        isoTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.ISOSCELES))));
+        scaTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.SCALENE))));
 
         Map<TriangleTypes, List<File>> trainintFiles = new HashMap<>();
         trainintFiles.put(TriangleTypes.EQUILATERAL, eqTriangles);

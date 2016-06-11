@@ -29,11 +29,15 @@ public class TrainingDataProvider {
         for (Map.Entry<TriangleTypes, List<File>> entry : e.entrySet()) {
             LOGGER.info("Carregando e processando exemplos do tipo " + entry.getKey().toString());
             imgProcessor.loadImages(entry.getValue().toArray(new File[0]));
-            imgProcessor.resizeTo28x28();
+//            imgProcessor.resizeToWidth28(); // comentado pq acho que redimensionar a imagem pode causar muita perda
+                                              // os max/min x/y da bbox ja sao normalizadas para o aspecto das dimensoes
+                                              // 28 x 28, entao este passo aqui tava meio que redundante
             imgProcessor.convertAllTo8BitGrayScale();
+            imgProcessor.binarizeImage();
             imgProcessor.convertToEdges();
-            imgProcessor.saveImages(Application.IMAGES_OUTPUT_DIR); //salva as imagens processadas pelo ImageProcessor, interessante para depuração..
-            examples.put(entry.getKey(), imgProcessor.getBoundingBoxes());
+
+            imgProcessor.saveImages(Application.getTriangleImageOutputDirByType(entry.getKey())); //salva as imagens processadas pelo ImageProcessor, interessante para depuração..
+            examples.put(entry.getKey(), imgProcessor.getNormalizedBoundingBoxes());
             totalTrainingExamples += examples.get(entry.getKey()).size();
         }
 

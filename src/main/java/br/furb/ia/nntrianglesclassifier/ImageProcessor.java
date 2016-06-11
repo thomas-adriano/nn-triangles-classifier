@@ -26,6 +26,12 @@ public class ImageProcessor {
     private final List<File> images = new ArrayList<>();
     private final List<ij.process.ImageProcessor> ip = new ArrayList<>();
     private final List<ImageConverter> ic = new ArrayList<>();
+    private static final Dimension BASE_DIMENSIONS = new Dimension();
+
+    private static final class Dimension {
+        public static final float X = 28;
+        public static final float Y = 28;
+    }
 
     public void loadImages(File[] imgs) {
         assert imgs != null;
@@ -49,18 +55,21 @@ public class ImageProcessor {
         logImagesContents();
     }
 
-    public void resizeTo28x28() {
-        boolean hadSome = false;
+    /**
+     * Redimensiona a imagem mantendo a proporção, e.g.: para 28 x Y onde Y = tamanho necessário para manter a proporção da imagem.
+     */
+    public void resizeToWidth28() {
+        int resized = 0;
         for (int i = 0; i < ip.size(); i++) {
             ij.process.ImageProcessor p = ip.get(i);
             if (p.getHeight() > 28 || p.getWidth() > 28) {
                 LOGGER.debug("Redimensionando imagem " + images.get(i).getName() + " de " + p.getWidth() + " x " + p.getHeight() + " para 28 x 28...");
-                ip.add(i, p.resize(28));
-                hadSome = true;
+                ip.set(i, p.resize(28));
+                resized++;
             }
         }
-        if (hadSome) {
-            LOGGER.info(ic.size() + " imagens redimensionadas para 28 x 28");
+        if (resized > 0) {
+            LOGGER.info(resized + " imagens redimensionadas para 28 x 28");
             logImagesContents();
         } else {
             LOGGER.info("Imagens com dimensões maiores que 28 x 28 não foram encontradas, por isso nenhum processo de redimensionamento foi executado.");
@@ -69,10 +78,21 @@ public class ImageProcessor {
 
     public void convertAllTo8BitGrayScale() {
         for (int i = 0; i < ic.size(); i++) {
+
             LOGGER.debug("Convertendo imagem " + images.get(i).getName() + " para 8bit gray scale - " + (i + 1) + " de " + ic.size());
             ic.get(i).convertToGray8();
         }
         LOGGER.info(ic.size() + " imagens convertidas para 8-bit gray scale");
+        logImagesContents();
+    }
+
+    public void binarizeImage() {
+        for (int i = 0; i < ip.size(); i++) {
+            ij.process.ImageProcessor p = ip.get(i);
+            LOGGER.debug("Binarizando imagem " + images.get(i).getName() + " - " + (i + 1) + " de " + ic.size());
+            p.autoThreshold();
+        }
+        LOGGER.info(ic.size() + " imagens binarizadas");
         logImagesContents();
     }
 
@@ -89,7 +109,7 @@ public class ImageProcessor {
     private void logImagesContents() {
         for (int i = 0; i < ip.size(); i++) {
             ij.process.ImageProcessor p = ip.get(i);
-            LOGGER.debug("  Imagem \"" + images.get(i).getName() + "\" (" + p.getWidth() + " colunas e " + p.getHeight() + " linhas): " + Arrays.toString((byte[]) p.getPixels()));
+            LOGGER.debug("  Imagem \"" + images.get(i).getName() + "\" (" + p.getWidth() + " colunas e " + p.getHeight() + " linhas): " + Arrays.toString(p.getFloatArray()));
         }
     }
 
@@ -108,31 +128,47 @@ public class ImageProcessor {
     }
 
     /**
-     * Calcula e retorna as bounding boxes.
+     * Calcula e retorna as bounding boxes com os maxX/minX/maxY/minY normalizados tendo como base a dimensão 28x28
      * É importante evidenciar que a bounding box extraída atualmente tem uma pequena taxa de erro nas coordenadas Y (maxY/minY)
      * de aproximadamente 3.5%.
      *
      * @return {@link BBox} de todas as imagens carregadas através do metodo {@link #loadImages(File[])}
      */
-    public List<BBox> getBoundingBoxes() {
+    public List<BBox> getNormalizedBoundingBoxes() {
         List<BBox> res = new ArrayList<>();
         //para cada imagem...
         for (int i = 0; i < ip.size(); i++) {
-            ij.process.ImageProcessor p = ip.get(i);
-            Map<Integer, List<Integer>> edgesCoords = getEdgesCoordinates(p);
-            int minX = edgesCoords.keySet().stream().sorted().findFirst().get();
-            int maxX = edgesCoords.keySet().stream().sorted((o1, o2) -> o2 - o1).findFirst().get();
+            try {
+                ij.process.ImageProcessor p = ip.get(i);
+                Map<Integer, List<Integer>> edgesCoords = getEdgesCoordinates(p);
+                int minX = edgesCoords.keySet().stream().sorted().findFirst().orElseThrow(ImageIncompatibleException::new);
+                int maxX = edgesCoords.keySet().stream().sorted((o1, o2) -> o2 - o1).findFirst().orElseThrow(ImageIncompatibleException::new);
 
-            //encontra o Y
-            List<Integer> yArray = new ArrayList<>();
-            for (List<Integer> l : edgesCoords.values()) {
-                yArray.addAll(l);
+                //encontra o Y
+                List<Integer> yArray = new ArrayList<>();
+                for (List<Integer> l : edgesCoords.values()) {
+                    yArray.addAll(l);
+                }
+                int minY = yArray.stream().sorted().findFirst().orElseThrow(ImageIncompatibleException::new);
+                int maxY = yArray.stream().sorted((o1, o2) -> o2 - o1).findFirst().orElseThrow(ImageIncompatibleException::new);
+
+                //normaliza os min/max x/y
+                if (p.getWidth() != BASE_DIMENSIONS.X) {
+                    double ratio = BASE_DIMENSIONS.X / p.getWidth();
+                    minX *= ratio;
+                    maxX *= ratio;
+                }
+                if (p.getHeight() != BASE_DIMENSIONS.Y) {
+                    double ratio = BASE_DIMENSIONS.Y / p.getHeight();
+                    minY *= ratio;
+                    maxY *= ratio;
+                }
+
+                LOGGER.debug(images.get(i).getName() + " minX: " + minX + " / maxX: " + maxX + " / maxY: " + maxY + " / minY: " + minY);
+                res.add(new BBox(maxX, minX, maxY, minY));
+            } catch (ImageIncompatibleException e) {
+                LOGGER.error("Bounding box de imagem "+images.get(i)+" não pôde ser extraído.");
             }
-            int minY = yArray.stream().sorted().findFirst().get();
-            int maxY = yArray.stream().sorted((o1, o2) -> o2 - o1).findFirst().get();
-
-            LOGGER.debug(images.get(i).getName() + " minX: " + minX + " / maxX: " + maxX + " / maxY: " + maxY + " / minY: " + minY);
-            res.add(new BBox(maxX, minX, maxY, minY));
         }
         return res;
     }
