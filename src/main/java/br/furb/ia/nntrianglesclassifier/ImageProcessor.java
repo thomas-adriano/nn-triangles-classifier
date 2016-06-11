@@ -137,6 +137,7 @@ public class ImageProcessor {
     public List<BBox> getNormalizedBoundingBoxes() {
         List<BBox> res = new ArrayList<>();
         //para cada imagem...
+
         for (int i = 0; i < ip.size(); i++) {
             try {
                 ij.process.ImageProcessor p = ip.get(i);

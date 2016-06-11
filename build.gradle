@@ -11,6 +11,7 @@ repositories {
 dependencies {
     //image processing
     compile group: 'gov.nih.imagej', name: 'imagej', version: '1.47'
+
     //neural networks
     compile group: 'org.encog', name: 'encog-core', version: '3.3.0'
 
