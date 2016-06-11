@@ -127,6 +127,24 @@ public class ImageProcessor {
 
     }
 
+    public void testContours() {
+//        for (int i = 0; i < ip.size(); i++) {
+//            ij.process.ImageProcessor p = ip.get(i);
+//            LOGGER.debug("---------> VARRENDO PIXELS DE IMAGEM " + images.get(i).getName());
+//            for (int x = 0; x < p.getWidth(); x++) {
+//                for (int y = 0; y < p.getHeight(); y++) {
+//                    int pixel = p.getPixel(x, y);
+//                    if (pixel >= (p.getMax() - 50)) {
+//                        LOGGER.debug("X: " + x + " / Y: " + y + " = " + pixel);
+//                    }
+//                    if (pixel != -16777216 && pixel != -65536 && pixel != -1) {
+//                        LOGGER.debug("X: " + x + " / Y: " + y + " = " + pixel);
+//                    }
+//                }
+//            }
+//        }
+    }
+
     /**
      * Calcula e retorna as bounding boxes com os maxX/minX/maxY/minY normalizados tendo como base a dimensão 28x28
      * É importante evidenciar que a bounding box extraída atualmente tem uma pequena taxa de erro nas coordenadas Y (maxY/minY)
@@ -168,7 +186,7 @@ public class ImageProcessor {
                 LOGGER.debug(images.get(i).getName() + " minX: " + minX + " / maxX: " + maxX + " / maxY: " + maxY + " / minY: " + minY);
                 res.add(new BBox(maxX, minX, maxY, minY));
             } catch (ImageIncompatibleException e) {
-                LOGGER.error("Bounding box de imagem "+images.get(i)+" não pôde ser extraído.");
+                LOGGER.error("Bounding box de imagem " + images.get(i) + " não pôde ser extraído.");
             }
         }
         return res;
