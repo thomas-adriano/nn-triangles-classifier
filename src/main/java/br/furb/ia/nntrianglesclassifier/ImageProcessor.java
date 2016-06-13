@@ -150,7 +150,9 @@ public class ImageProcessor {
             while (x < arr.length && y < arr[x].length) {
                 int pixel = arr[x][y];
 
-                if (pixel == -1 || pixel == 255) {
+                if (x == 0 && y == 287) {
+                    line[x] = "--> AQUIII!!!! <--";
+                } else if (pixel == -1 || pixel == 255) {
                     line[x] = ".";
                 } else {
                     line[x] = " ";
@@ -180,11 +182,13 @@ public class ImageProcessor {
                 }
             }
         }
-        Point2D minXminY = contourCoordinates.stream().sorted().findFirst().get();
+        //ponto inferior esquerdo - deveria ser o primeiro pixel encontrado na figura (lembrando da origem considerado em imeagens: superior esquerdo)
+        //isso acontece devido ao calculo de peso das coordenadas
+        Point2D minXminY = contourCoordinates.stream().sorted(Point2D::minXminYComparator).findFirst().get();
+        //ponto inferior direito
         Point2D maxXmaxY = contourCoordinates.stream().sorted(Point2D::compareToReverse).findFirst().get();
         System.out.println(minXminY);
         System.out.println(maxXmaxY);
-
 
         return null;
     }

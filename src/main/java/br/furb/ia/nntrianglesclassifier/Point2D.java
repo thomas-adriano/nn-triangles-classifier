@@ -29,4 +29,8 @@ public class Point2D implements Comparable<Point2D> {
         return (o.x + o.y) - (this.x + this.y);
     }
 
+    public int minXminYComparator(Point2D o) {
+        return (int) (this.x + (this.y*0.3)) - (int) (o.x + (o.y*0.3));
+    }
+
 }
