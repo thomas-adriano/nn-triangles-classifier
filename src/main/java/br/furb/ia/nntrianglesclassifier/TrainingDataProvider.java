@@ -35,7 +35,8 @@ public class TrainingDataProvider {
             imgProcessor.convertAllTo8BitGrayScale();
             imgProcessor.binarizeImage();
             imgProcessor.convertToEdges();
-            imgProcessor.testContours();
+            imgProcessor.debugContours(); //se descomentar, printa na console a versao ascii das imagens
+//            imgProcessor.getPrincipalPoints();
             imgProcessor.saveImages(Application.getTriangleImageOutputDirByType(entry.getKey())); //salva as imagens processadas pelo ImageProcessor, interessante para depuração..
             examples.put(entry.getKey(), imgProcessor.getNormalizedBoundingBoxes());
             totalTrainingExamples += examples.get(entry.getKey()).size();

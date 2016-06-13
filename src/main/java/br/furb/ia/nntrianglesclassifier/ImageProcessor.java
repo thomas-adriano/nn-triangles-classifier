@@ -14,6 +14,17 @@ import java.io.IOException;
 import java.util.*;
 import java.util.List;
 
+
+//TODO: mudar o resultado do processamento das imagens de BBOX para Pontos Mais Significativos.
+//Entendo que para extrair os pontos mais significativos seja necessário extrair uma array com as coordenadas dos contornos
+//do triangulo e processa-lo para que ela contenha só 3 coordenadas que são referentes a cada angulo do triangulo.
+//Com estas coordenadas seria possível saber o tamanho de cada "lado" do triangulo, e com isso
+//saber exatamente qual é o tipo do triangulo. Utilizando apenas BBOX (e verificando apenas a largura ou altura da bbox)
+//nao é possível descobrir todos os tipos, já que cada tipo se resume em:
+//  - equilateral = todos os lados iguais (suportado por bbox);
+//  - isosceles = apenas 2 lados iguais (nao suportado. Pode ter larguras e alturas variáveis)
+//  - escaleno = nenhum lado igual (nao suportado. Pode ter larguras e alturas variáveis)
+
 /**
  * Provê metodos para carregar imagens (tiff, dicom, fits, pgm, jpeg, bmp, gif, lut, roi), aplicar transformações
  * relevantes para a extração de bounding box e para efetivamente extrair bounding boxes de imagens.
@@ -127,22 +138,55 @@ public class ImageProcessor {
 
     }
 
-    public void testContours() {
-//        for (int i = 0; i < ip.size(); i++) {
-//            ij.process.ImageProcessor p = ip.get(i);
-//            LOGGER.debug("---------> VARRENDO PIXELS DE IMAGEM " + images.get(i).getName());
-//            for (int x = 0; x < p.getWidth(); x++) {
-//                for (int y = 0; y < p.getHeight(); y++) {
-//                    int pixel = p.getPixel(x, y);
-//                    if (pixel >= (p.getMax() - 50)) {
-//                        LOGGER.debug("X: " + x + " / Y: " + y + " = " + pixel);
-//                    }
-//                    if (pixel != -16777216 && pixel != -65536 && pixel != -1) {
-//                        LOGGER.debug("X: " + x + " / Y: " + y + " = " + pixel);
-//                    }
-//                }
-//            }
-//        }
+    public void debugContours() {
+        for (int i = 0; i < ip.size(); i++) {
+            ij.process.ImageProcessor p = ip.get(i);
+            LOGGER.debug("---------> VARRENDO PIXELS DE IMAGEM " + images.get(i).getName());
+
+            int[][] arr = p.getIntArray();
+            int y = 0;
+            int x = 0;
+            String[] line = new String[arr.length];
+            while (x < arr.length && y < arr[x].length) {
+                int pixel = arr[x][y];
+
+                if (pixel == -1 || pixel == 255) {
+                    line[x] = ".";
+                } else {
+                    line[x] = " ";
+                }
+
+                x++;
+                if (x == arr.length - 1) {
+                    x = 0;
+                    y++;
+                    System.out.println(Arrays.toString(line).replace(",", ""));
+                }
+            }
+            LOGGER.debug("Encontrando pontos mais significativos de imagem " + images.get(i).getName());
+            getPrincipalPoints(p);
+        }
+    }
+
+    private List<Point2D> getPrincipalPoints(ij.process.ImageProcessor p) {
+        List<Point2D> contourCoordinates = new ArrayList<>();
+
+        int[][] arr = p.getIntArray();
+        for (int x = 0; x < arr.length; x++) {
+            for (int y = 0; y < arr[x].length; y++) {
+                int pixel = arr[x][y];
+                if (pixel == -1 || pixel == 255) {
+                    contourCoordinates.add(new Point2D(x, y));
+                }
+            }
+        }
+        Point2D minXminY = contourCoordinates.stream().sorted().findFirst().get();
+        Point2D maxXmaxY = contourCoordinates.stream().sorted(Point2D::compareToReverse).findFirst().get();
+        System.out.println(minXminY);
+        System.out.println(maxXmaxY);
+
+
+        return null;
     }
 
     /**

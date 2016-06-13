@@ -18,6 +18,9 @@ import java.util.*;
 
 //TODO: criar mais arquivos de imagem exemplos (nao precisam ser 28x28, seria até melhor que fossem de outras dimensões)
 //TODO: se a acertividade da rede neural estiver baixa, calibra-la para ter uma boa taxa de acertividade
+//TODO: melhorar algoritmo de extração de dados das imagnes para ao invés de simplesmente extrair a bbox, extraia os
+//pontos mais significativos (que seriam as coordenadas de cada angulo do triangulo, ou seja, 3 coordenadas sempre).
+//Mais sobre o pq dessa necessidade está descrito na classe ImageProcessor.
 public class Application {
     private static final Logger LOGGER = LogManager.getLogger();
     public static final File IMAGES_OUTPUT_DIR = new File("src/main/resources/processedImages");
@@ -51,6 +54,7 @@ public class Application {
         List<File> isoTriangles = new ArrayList<>();
         List<File> scaTriangles = new ArrayList<>();
 
+        //carrega todos os arquivos presentes nas pastas de imagens e adiciona em sua respectiva colecao
         eqTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.EQUILATERAL))));
         isoTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.ISOSCELES))));
         scaTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.SCALENE))));
