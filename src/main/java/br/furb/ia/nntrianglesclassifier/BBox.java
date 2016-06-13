@@ -1,5 +1,8 @@
 package br.furb.ia.nntrianglesclassifier;
 
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * Created by Thomas.Adriano on 09/06/2016.
  */
@@ -30,6 +33,10 @@ public class BBox {
 
     public int getMinY() {
         return minY;
+    }
+
+    public List<Integer> values() {
+        return Arrays.asList(maxX, minX, maxY, minY);
     }
 
     @Override

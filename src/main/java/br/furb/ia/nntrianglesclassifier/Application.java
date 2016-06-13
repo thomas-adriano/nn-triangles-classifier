@@ -1,9 +1,13 @@
 package br.furb.ia.nntrianglesclassifier;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 // - A pasta main/java/resources/images contém as imagens exemplo origem. Para adicionar novas imagens basta copiá-las
@@ -13,8 +17,7 @@ import java.util.*;
 
 
 //TODO: criar mais arquivos de imagem exemplos (nao precisam ser 28x28, seria até melhor que fossem de outras dimensões)
-//TODO: desenvolver a rede neural e alimenta-la com os dados do treinamento (TrainingDataProvider.processAndGetExamples)
-//TODO: (depende do todo anterior) calibrar a rede neural para ter uma boa taxa de acertividade
+//TODO: se a acertividade da rede neural estiver baixa, calibra-la para ter uma boa taxa de acertividade
 public class Application {
     private static final Logger LOGGER = LogManager.getLogger();
     public static final File IMAGES_OUTPUT_DIR = new File("src/main/resources/processedImages");
@@ -25,6 +28,40 @@ public class Application {
     public static final String EQUILATERAL_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/equilateral";
     public static final String ISOSCELES_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/isosceles";
     public static final String SCALENE_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/scalene";
+
+    public static void main(String[] args) {
+        long init = System.currentTimeMillis();
+        LOGGER.info("Iniciando execução...");
+
+        Map<TriangleTypes, List<BBox>> trainingData = loadTrainingData();
+        File csvFile = new File("out.csv");
+        writeToCSV(trainingData, csvFile);
+        NeuralNetwork nn = new NeuralNetwork();
+        nn.doTheMagic(csvFile);
+
+
+        double elapsed = (System.currentTimeMillis() - init) / 1000;
+        LOGGER.info("Tempo de execução total: " + elapsed + " segundos.");
+    }
+
+    public static Map<TriangleTypes, List<BBox>> loadTrainingData() {
+        TrainingDataProvider tp = new TrainingDataProvider(new ImageProcessor());
+
+        List<File> eqTriangles = new ArrayList<>();
+        List<File> isoTriangles = new ArrayList<>();
+        List<File> scaTriangles = new ArrayList<>();
+
+        eqTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.EQUILATERAL))));
+        isoTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.ISOSCELES))));
+        scaTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.SCALENE))));
+
+        Map<TriangleTypes, List<File>> trainintFiles = new HashMap<>();
+        trainintFiles.put(TriangleTypes.EQUILATERAL, eqTriangles);
+        trainintFiles.put(TriangleTypes.ISOSCELES, isoTriangles);
+        trainintFiles.put(TriangleTypes.SCALENE, scaTriangles);
+
+        return tp.processAndGetExamples(trainintFiles);
+    }
 
     public static final File getTriangleImageOutputDirByType(TriangleTypes t) {
         switch (t) {
@@ -52,37 +89,29 @@ public class Application {
         }
     }
 
-    public static void main(String[] args) {
-        long init = System.currentTimeMillis();
-        LOGGER.info("Iniciando execução...");
+    public static void writeToCSV(Map<TriangleTypes, List<BBox>> trainData, File csvDestPath) {
+        String[] csvHeaders = new String[]{"maxx", "minx", "maxy", "miny", "type"};
 
-        Map<TriangleTypes, List<BBox>> trainingData = loadTrainingData();
+        Collection<String[]> csvEntries = new ArrayList<>();
 
-        NeuralNetwork nn = new NeuralNetwork();
-        nn.doTheMagic(trainingData);
+        for (Map.Entry<TriangleTypes, List<BBox>> e : trainData.entrySet()) {
+            String[] line = new String[5];
+            for (BBox b : e.getValue()) {
+                for (int i = 0; i < b.values().size(); i++) {
+                    line[i] = String.valueOf(b.values().get(i));
+                }
+                line[4] = String.valueOf(e.getKey().getCharValue());
+                csvEntries.add(line);
+            }
+        }
 
-
-        double elapsed = (System.currentTimeMillis() - init) / 1000;
-        LOGGER.info("Tempo de execução total: " + elapsed + " segundos.");
-    }
-
-    public static Map<TriangleTypes, List<BBox>> loadTrainingData() {
-        TrainingDataProvider tp = new TrainingDataProvider(new ImageProcessor());
-
-        List<File> eqTriangles = new ArrayList<>();
-        List<File> isoTriangles = new ArrayList<>();
-        List<File> scaTriangles = new ArrayList<>();
-
-        eqTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.EQUILATERAL))));
-        isoTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.ISOSCELES))));
-        scaTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.SCALENE))));
-
-        Map<TriangleTypes, List<File>> trainintFiles = new HashMap<>();
-        trainintFiles.put(TriangleTypes.EQUILATERAL, eqTriangles);
-        trainintFiles.put(TriangleTypes.ISOSCELES, isoTriangles);
-        trainintFiles.put(TriangleTypes.SCALENE, scaTriangles);
-
-        return tp.processAndGetExamples(trainintFiles);
+        try (FileWriter fw = new FileWriter(csvDestPath)) {
+            try (CSVPrinter p = new CSVPrinter(fw, CSVFormat.DEFAULT.withHeader(csvHeaders))) {
+                p.printRecords(csvEntries);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 }

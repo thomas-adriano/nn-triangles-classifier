@@ -17,6 +17,8 @@ dependencies {
 
     compile group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.6'
 
+    compile group: 'org.apache.commons', name: 'commons-csv', version: '1.4'
+
     testCompile 'junit:junit:4.12'
 }
 

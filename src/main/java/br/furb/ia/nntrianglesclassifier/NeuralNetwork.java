@@ -7,11 +7,14 @@ import org.encog.ml.data.versatile.NormalizationHelper;
 import org.encog.ml.data.versatile.VersatileMLDataSet;
 import org.encog.ml.data.versatile.columns.ColumnDefinition;
 import org.encog.ml.data.versatile.columns.ColumnType;
+import org.encog.ml.data.versatile.sources.CSVDataSource;
 import org.encog.ml.data.versatile.sources.VersatileDataSource;
 import org.encog.ml.factory.MLMethodFactory;
 import org.encog.ml.model.EncogModel;
+import org.encog.util.csv.CSVFormat;
 import org.encog.util.simple.EncogUtility;
 
+import java.io.File;
 import java.util.*;
 
 /**
@@ -19,72 +22,21 @@ import java.util.*;
  */
 public class NeuralNetwork {
 
-    private static final class TrianglesClassifierDataSource implements VersatileDataSource {
-
-        private static final String[] HEADERS = new String[]{"type", "maxx", "minx", "maxy", "miny"};
-        private Map<String, Integer> headerIndex = new HashMap<>();
-        private final Map<TriangleTypes, List<BBox>> trainingData;
-        private int actualLine = 0;
-        private final List<List<String>> lines;
-
-        public TrianglesClassifierDataSource(Map<TriangleTypes, List<BBox>> trainingData) {
-            this.trainingData = trainingData;
-            for (int i = 0; i < HEADERS.length; i++) {
-                headerIndex.put(HEADERS[i].toLowerCase(), i);
-            }
-            lines = convertToLines();
-        }
-
-        private List<List<String>> convertToLines() {
-            List<List<String>> res = new ArrayList<>();
-            for (Map.Entry<TriangleTypes, List<BBox>> e : trainingData.entrySet()) {
-                for (int i = 0; i < e.getValue().size(); i++) {
-                    BBox b = e.getValue().get(i);
-                    res.add(Arrays.asList(String.valueOf(e.getKey().getCharValue()), String.valueOf(b.getMaxX()),
-                            String.valueOf(b.getMinX()), String.valueOf(b.getMaxY()), String.valueOf(b.getMinY())));
-                }
-            }
-
-            return res;
-        }
-
-        @Override
-        public String[] readLine() {
-            if (lines.size() - 1 > actualLine) {
-                return null;
-            }
-            String[] res = lines.get(actualLine).toArray(new String[0]);
-
-            System.out.println("Retornando linha " + Arrays.toString(res));
-            return res;
-        }
-
-        @Override
-        public void rewind() {
-            actualLine = 0;
-        }
-
-        @Override
-        public int columnIndex(String name) {
-            return headerIndex.get(name.toLowerCase());
-        }
-    }
-
-    public void doTheMagic(final Map<TriangleTypes, List<BBox>> trainingData) {
+    public void doTheMagic(final File trainingData) {
 
 
-        VersatileDataSource ds = new TrianglesClassifierDataSource(trainingData);
+        VersatileDataSource ds = new CSVDataSource(trainingData, true, CSVFormat.DECIMAL_POINT);
         // Define the format of the data file.
         // This area will change, depending on the columns and
         // format of the file that you are trying to model.
         VersatileMLDataSet data = new VersatileMLDataSet(ds);
-        data.defineSourceColumn("maxx", 1, ColumnType.continuous);
-        data.defineSourceColumn("minx", 2, ColumnType.continuous);
-        data.defineSourceColumn("maxy", 3, ColumnType.continuous);
-        data.defineSourceColumn("miny", 4, ColumnType.continuous);
+        data.defineSourceColumn("maxx", 0, ColumnType.continuous);
+        data.defineSourceColumn("minx", 1, ColumnType.continuous);
+        data.defineSourceColumn("maxy", 2, ColumnType.continuous);
+        data.defineSourceColumn("miny", 3, ColumnType.continuous);
 
         // Define the column that we are trying to predict.
-        ColumnDefinition outputColumn = data.defineSourceColumn("type", 0,
+        ColumnDefinition outputColumn = data.defineSourceColumn("type", 4,
                 ColumnType.nominal);
 
         // Analyze the data, determine the min/max/mean/sd of every column.
