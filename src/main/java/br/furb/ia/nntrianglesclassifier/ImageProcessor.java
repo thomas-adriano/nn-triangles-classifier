@@ -17,16 +17,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 
-//TODO: mudar o resultado do processamento das imagens de BBOX para contourCoordinates Mais Significativos.
-//Entendo que para extrair os contourCoordinates mais significativos seja necessário extrair uma array com as coordenadas dos contornos
-//do triangulo e processa-lo para que ela contenha só 3 coordenadas que são referentes a cada angulo do triangulo.
-//Com estas coordenadas seria possível saber o tamanho de cada "lado" do triangulo, e com isso
-//saber exatamente qual é o tipo do triangulo. Utilizando apenas BBOX (e verificando apenas a largura ou altura da bbox)
-//nao é possível descobrir todos os tipos, já que cada tipo se resume em:
-//  - equilateral = todos os lados iguais (suportado por bbox);
-//  - isosceles = apenas 2 lados iguais (nao suportado. Pode ter larguras e alturas variáveis)
-//  - escaleno = nenhum lado igual (nao suportado. Pode ter larguras e alturas variáveis)
-
 /**
  * Provê metodos para carregar imagens (tiff, dicom, fits, pgm, jpeg, bmp, gif, lut, roi), aplicar transformações
  * relevantes para a extração de bounding box e para efetivamente extrair bounding boxes de imagens.
@@ -224,7 +214,7 @@ public class ImageProcessor {
         for (int i = 0; i < ip.size(); i++) {
             ij.process.ImageProcessor imgProc = ip.get(i);
             List<Pixel> contourCoordinates = getEdgesPixels(imgProc);
-            List<Pixel> extractedPoints = new ArrayList<>();
+            Set<Pixel> extractedPoints = new HashSet<>();
 
             BBox bbox = getBoundingBox(imgProc);
 
@@ -233,65 +223,54 @@ public class ImageProcessor {
             List<Pixel> minXPixels = contourCoordinates.stream().filter(p -> p.x <= bbox.getMinX()).collect(Collectors.toList());
             List<Pixel> minYPixels = contourCoordinates.stream().filter(p -> p.y <= bbox.getMinY()).collect(Collectors.toList());
 
+            double tolerancePercentage = 0.03;
+            int tolerance = getDistanceTolerance(imgProc.getWidth(), imgProc.getHeight(), tolerancePercentage);
+
             Pixel maxXmaxYPixel = maxXPixels.stream().sorted((p1, p2) -> p2.y - p1.y).findFirst().orElseThrow(ImageIncompatibleException::new);
             if (maxXmaxYPixel != null) {
                 extractedPoints.add(maxXmaxYPixel);
             }
-            Pixel maxXminYPixel = maxXPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p1.y - p2.y).findFirst().orElse(null);
-            if (maxXminYPixel != null) {
+            Pixel maxXminYPixel = maxXPixels.stream().sorted((p1, p2) -> p1.y - p2.y).findFirst().orElse(null);
+            if (maxXminYPixel != null && getDistance(maxXmaxYPixel, maxXminYPixel) > tolerance) {
                 extractedPoints.add(maxXminYPixel);
             }
 
-            Pixel minXmaxYPixel = minXPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p2.y - p1.y).findFirst().orElse(null);
+            Pixel minXmaxYPixel = minXPixels.stream().sorted((p1, p2) -> p2.y - p1.y).findFirst().orElse(null);
             if (minXmaxYPixel != null) {
                 extractedPoints.add(minXmaxYPixel);
             }
-            Pixel minXminYPixel = minXPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p1.y - p2.y).findFirst().orElse(null);
-            if (minXminYPixel != null) {
+            Pixel minXminYPixel = minXPixels.stream().sorted((p1, p2) -> p1.y - p2.y).findFirst().orElse(null);
+            if (minXminYPixel != null && getDistance(minXmaxYPixel, minXminYPixel) > tolerance) {
                 extractedPoints.add(minXminYPixel);
             }
 
-            Pixel maxYmaxXPixel = maxYPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p2.x - p1.x).findFirst().orElse(null);
-            if (maxYmaxXPixel != null) {
+            Pixel maxYmaxXPixel = maxYPixels.stream().sorted((p1, p2) -> p2.x - p1.x).findFirst().orElse(null);
+            if (maxYmaxXPixel != null && getDistance(maxYmaxXPixel, maxXmaxYPixel) > tolerance) {
                 extractedPoints.add(maxYmaxXPixel);
             }
-            Pixel maxYminXPixel = maxYPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p1.x - p2.x).findFirst().orElse(null);
-            if (maxYminXPixel != null) {
+            Pixel maxYminXPixel = maxYPixels.stream().sorted((p1, p2) -> p1.x - p2.x).findFirst().orElse(null);
+            if (maxYminXPixel != null && getDistance(maxYmaxXPixel, maxYminXPixel) > tolerance && getDistance(minXmaxYPixel, maxYminXPixel) > tolerance) {
                 extractedPoints.add(maxYminXPixel);
             }
 
-            Pixel minYmaxXPixel = minYPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p2.x - p1.x).findFirst().orElse(null);
-            if (minYmaxXPixel != null) {
+            Pixel minYmaxXPixel = minYPixels.stream().sorted((p1, p2) -> p2.x - p1.x).findFirst().orElse(null);
+            if (minYmaxXPixel != null && getDistance(minYmaxXPixel, maxXminYPixel) > tolerance) {
                 extractedPoints.add(minYmaxXPixel);
             }
-            Pixel minYminXPixel = minYPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p1.x - p2.x).findFirst().orElse(null);
-            if (minYminXPixel != null) {
+            Pixel minYminXPixel = minYPixels.stream().sorted((p1, p2) -> p1.x - p2.x).findFirst().orElse(null);
+            if (minYminXPixel != null && getDistance(minYmaxXPixel, minYminXPixel) > tolerance && getDistance(minYminXPixel, minXminYPixel) > tolerance) {
                 extractedPoints.add(minYminXPixel);
             }
 
-            //remove os pares proximos de pontos de cada axis
-            double tolerancePercentage = 0.03;
-            int tolerance = getDistanceTolerance(imgProc.getWidth(), imgProc.getHeight(), tolerancePercentage);
-            if ((maxXmaxYPixel != null && maxXminYPixel != null) && getDistance(maxXmaxYPixel, maxXminYPixel) <= tolerance) {
-                extractedPoints.remove(maxXminYPixel);
-            }
-            if ((minXmaxYPixel != null && minXminYPixel != null) && getDistance(minXmaxYPixel, minXminYPixel) <= tolerance) {
-                extractedPoints.remove(minXminYPixel);
-            }
-            if ((maxYmaxXPixel != null && maxYminXPixel != null) && getDistance(maxYmaxXPixel, maxYminXPixel) <= tolerance) {
-                extractedPoints.remove(maxYminXPixel);
-            }
-            if ((minYmaxXPixel != null && minYminXPixel != null) && getDistance(minYmaxXPixel, minYminXPixel) <= tolerance) {
-                extractedPoints.remove(minYminXPixel);
-            }
-
+            //remove os pares proximos de pontos restantes
             List<Pixel> finalPixels = new ArrayList<>(extractedPoints);
+            List<Pixel> extractedPointsList = new ArrayList<>(extractedPoints);
             while (finalPixels.size() > 3) {
                 tolerance = getDistanceTolerance(imgProc.getWidth(), imgProc.getHeight(), tolerancePercentage);
                 for (int u = 0; u < extractedPoints.size() && finalPixels.size() > 3; u++) {
-                    Pixel p1 = extractedPoints.get(u);
+                    Pixel p1 = extractedPointsList.get(u);
                     for (int q = 0; q < extractedPoints.size() && finalPixels.size() > 3; q++) {
-                        Pixel p2 = extractedPoints.get(q);
+                        Pixel p2 = extractedPointsList.get(q);
                         if (p1 == p2) {
                             continue;
                         }

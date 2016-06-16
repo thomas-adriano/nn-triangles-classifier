@@ -18,9 +18,6 @@ import java.util.*;
 
 //TODO: criar mais arquivos de imagem exemplos (nao precisam ser 28x28, seria até melhor que fossem de outras dimensões)
 //TODO: se a acertividade da rede neural estiver baixa, calibra-la para ter uma boa taxa de acertividade
-//TODO: melhorar algoritmo de extração de dados das imagnes para ao invés de simplesmente extrair a bbox, extraia os
-//pontos mais significativos (que seriam as coordenadas de cada angulo do triangulo, ou seja, 3 coordenadas sempre).
-//Mais sobre o pq dessa necessidade está descrito na classe ImageProcessor.
 public class Application {
     private static final Logger LOGGER = LogManager.getLogger();
     public static final File IMAGES_OUTPUT_DIR = new File("src/main/resources/processedImages");
@@ -39,8 +36,12 @@ public class Application {
         Map<TriangleTypes, List<TrianglePrincipalPoints>> trainingData = loadTrainingData();
         File csvFile = new File("out.csv");
         writeToCSV(trainingData, csvFile);
-        NeuralNetwork nn = new NeuralNetwork();
-        nn.doTheMagic(csvFile);
+
+        try (NeuralNetwork nn = new NeuralNetwork()) {
+            nn.train(csvFile);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
 
         double elapsed = (System.currentTimeMillis() - init) / 1000;
