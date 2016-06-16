@@ -21,24 +21,20 @@ public class TrainingDataProvider {
         this.imgProcessor = ip;
     }
 
-    public Map<TriangleTypes, List<BBox>> processAndGetExamples(Map<TriangleTypes, List<File>> e) {
+    public Map<TriangleTypes, List<TrianglePrincipalPoints>> processAndGetExamples(Map<TriangleTypes, List<File>> e, boolean debug) {
         LOGGER.info("Iniciando carregamento e preparação dos exemplos para treinamento");
         int totalTrainingExamples = 0;
 
-        Map<TriangleTypes, List<BBox>> examples = new HashMap<>();
+        Map<TriangleTypes, List<TrianglePrincipalPoints>> examples = new HashMap<>();
         for (Map.Entry<TriangleTypes, List<File>> entry : e.entrySet()) {
             LOGGER.info("Carregando e processando exemplos do tipo " + entry.getKey().toString());
             imgProcessor.loadImages(entry.getValue().toArray(new File[0]));
-//            imgProcessor.resizeToWidth28(); // comentado pq acho que redimensionar a imagem pode causar muita perda
-                                              // os max/min x/y da bbox ja sao normalizadas para o aspecto das dimensoes
-                                              // 28 x 28, entao este passo aqui tava meio que redundante
             imgProcessor.convertAllTo8BitGrayScale();
             imgProcessor.binarizeImage();
             imgProcessor.convertToEdges();
-            imgProcessor.debugContours(); //se descomentar, printa na console a versao ascii das imagens
-//            imgProcessor.getPrincipalPoints();
+            imgProcessor.cropImagesToBBox();
             imgProcessor.saveImages(Application.getTriangleImageOutputDirByType(entry.getKey())); //salva as imagens processadas pelo ImageProcessor, interessante para depuração..
-            examples.put(entry.getKey(), imgProcessor.getNormalizedBoundingBoxes());
+            examples.put(entry.getKey(), imgProcessor.getPrincipalPoints(debug));
             totalTrainingExamples += examples.get(entry.getKey()).size();
         }
 

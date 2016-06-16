@@ -30,13 +30,15 @@ public class NeuralNetwork {
         // This area will change, depending on the columns and
         // format of the file that you are trying to model.
         VersatileMLDataSet data = new VersatileMLDataSet(ds);
-        data.defineSourceColumn("maxx", 0, ColumnType.continuous);
-        data.defineSourceColumn("minx", 1, ColumnType.continuous);
-        data.defineSourceColumn("maxy", 2, ColumnType.continuous);
-        data.defineSourceColumn("miny", 3, ColumnType.continuous);
+        data.defineSourceColumn("p1x", 0, ColumnType.continuous);
+        data.defineSourceColumn("p1y", 1, ColumnType.continuous);
+        data.defineSourceColumn("p2x", 2, ColumnType.continuous);
+        data.defineSourceColumn("p2y", 3, ColumnType.continuous);
+        data.defineSourceColumn("p3x", 4, ColumnType.continuous);
+        data.defineSourceColumn("p3y", 5, ColumnType.continuous);
 
         // Define the column that we are trying to predict.
-        ColumnDefinition outputColumn = data.defineSourceColumn("type", 4,
+        ColumnDefinition outputColumn = data.defineSourceColumn("type", 6,
                 ColumnType.nominal);
 
         // Analyze the data, determine the min/max/mean/sd of every column.

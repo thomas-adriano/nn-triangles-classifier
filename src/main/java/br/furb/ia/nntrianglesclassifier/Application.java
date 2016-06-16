@@ -36,7 +36,7 @@ public class Application {
         long init = System.currentTimeMillis();
         LOGGER.info("Iniciando execução...");
 
-        Map<TriangleTypes, List<BBox>> trainingData = loadTrainingData();
+        Map<TriangleTypes, List<TrianglePrincipalPoints>> trainingData = loadTrainingData();
         File csvFile = new File("out.csv");
         writeToCSV(trainingData, csvFile);
         NeuralNetwork nn = new NeuralNetwork();
@@ -47,7 +47,7 @@ public class Application {
         LOGGER.info("Tempo de execução total: " + elapsed + " segundos.");
     }
 
-    public static Map<TriangleTypes, List<BBox>> loadTrainingData() {
+    public static Map<TriangleTypes, List<TrianglePrincipalPoints>> loadTrainingData() {
         TrainingDataProvider tp = new TrainingDataProvider(new ImageProcessor());
 
         List<File> eqTriangles = new ArrayList<>();
@@ -64,7 +64,7 @@ public class Application {
         trainintFiles.put(TriangleTypes.ISOSCELES, isoTriangles);
         trainintFiles.put(TriangleTypes.SCALENE, scaTriangles);
 
-        return tp.processAndGetExamples(trainintFiles);
+        return tp.processAndGetExamples(trainintFiles, true /*loga ascii art representando os três pontos extraídos de cada uma das imagens*/);
     }
 
     public static final File getTriangleImageOutputDirByType(TriangleTypes t) {
@@ -93,18 +93,24 @@ public class Application {
         }
     }
 
-    public static void writeToCSV(Map<TriangleTypes, List<BBox>> trainData, File csvDestPath) {
-        String[] csvHeaders = new String[]{"maxx", "minx", "maxy", "miny", "type"};
+    public static void writeToCSV(Map<TriangleTypes, List<TrianglePrincipalPoints>> trainData, File csvDestPath) {
+        String[] csvHeaders = new String[]{"p1x", "p1y", "p2x", "p2y", "p3x", "p3y", "type"};
 
         Collection<String[]> csvEntries = new ArrayList<>();
 
-        for (Map.Entry<TriangleTypes, List<BBox>> e : trainData.entrySet()) {
-            String[] line = new String[5];
-            for (BBox b : e.getValue()) {
-                for (int i = 0; i < b.values().size(); i++) {
-                    line[i] = String.valueOf(b.values().get(i));
+        for (Map.Entry<TriangleTypes, List<TrianglePrincipalPoints>> e : trainData.entrySet()) {
+            for (TrianglePrincipalPoints p : e.getValue()) {
+                int actualIndex = 0;
+                String[] line = new String[7];
+                for (Pixel pixel : p.pixels()) {
+                    if (pixel != null) {
+                        for (int coord : pixel.values()) {
+                            line[actualIndex] = String.valueOf(coord);
+                            actualIndex++;
+                        }
+                    }
                 }
-                line[4] = String.valueOf(e.getKey().getCharValue());
+                line[6] = String.valueOf(e.getKey().getCharValue());
                 csvEntries.add(line);
             }
         }

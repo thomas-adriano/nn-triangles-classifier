@@ -9,14 +9,16 @@ import org.apache.logging.log4j.Logger;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.awt.image.ColorModel;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
-//TODO: mudar o resultado do processamento das imagens de BBOX para Pontos Mais Significativos.
-//Entendo que para extrair os pontos mais significativos seja necessário extrair uma array com as coordenadas dos contornos
+//TODO: mudar o resultado do processamento das imagens de BBOX para contourCoordinates Mais Significativos.
+//Entendo que para extrair os contourCoordinates mais significativos seja necessário extrair uma array com as coordenadas dos contornos
 //do triangulo e processa-lo para que ela contenha só 3 coordenadas que são referentes a cada angulo do triangulo.
 //Com estas coordenadas seria possível saber o tamanho de cada "lado" do triangulo, e com isso
 //saber exatamente qual é o tipo do triangulo. Utilizando apenas BBOX (e verificando apenas a largura ou altura da bbox)
@@ -37,11 +39,18 @@ public class ImageProcessor {
     private final List<File> images = new ArrayList<>();
     private final List<ij.process.ImageProcessor> ip = new ArrayList<>();
     private final List<ImageConverter> ic = new ArrayList<>();
-    private static final Dimension BASE_DIMENSIONS = new Dimension();
+    private static final Dimension BASE_DIMENSIONS = new Dimension(50, 50);
+    private static final int WHITE_PIXEL_VAL = -1;
+    private static final int BLACK_PIXEL_VAL = 255;
 
     private static final class Dimension {
-        public static final float X = 28;
-        public static final float Y = 28;
+        public final int X;
+        public final int Y;
+
+        public Dimension(int x, int y) {
+            X = x;
+            Y = y;
+        }
     }
 
     public void loadImages(File[] imgs) {
@@ -89,8 +98,8 @@ public class ImageProcessor {
 
     public void convertAllTo8BitGrayScale() {
         for (int i = 0; i < ic.size(); i++) {
-
             LOGGER.debug("Convertendo imagem " + images.get(i).getName() + " para 8bit gray scale - " + (i + 1) + " de " + ic.size());
+            ic.get(i).convertToRGB();
             ic.get(i).convertToGray8();
         }
         LOGGER.info(ic.size() + " imagens convertidas para 8-bit gray scale");
@@ -117,10 +126,36 @@ public class ImageProcessor {
         logImagesContents();
     }
 
+    public void cropImagesToBBox() {
+        List<ij.process.ImageProcessor> cropped = new ArrayList<>();
+        for (int i = 0; i < ip.size(); i++) {
+            ij.process.ImageProcessor p = ip.get(i);
+            int oldWidth = p.getWidth();
+            int oldHeight = p.getHeight();
+            try {
+                BBox box = getBoundingBox(p);
+                LOGGER.debug("BBox extraida de figura " + images.get(i).getName() + " (width: " + oldWidth + " height: " + oldHeight + "): " + box);
+                int newWidth = box.getMaxX() - box.getMinX();
+                int newHeigth = (box.getMaxY() - box.getMinY()) + 5 /*evita que deixe parte do triangulo de fora*/;
+                p.setRoi(new Rectangle(newWidth, newHeigth));
+                cropped.add(p.crop());
+
+                LOGGER.debug("  Imagem \"" + images.get(i).getName() + "\" \"cropeada\" de width/height: " + oldWidth + "/" + oldHeight + " para width/height: " + newWidth + "/" + newHeigth);
+            } catch (ImageIncompatibleException e) {
+                LOGGER.warn("Não foi possível extrair BBox de imagem " + images.get(i).getName());
+                ColorModel m = p.getCurrentColorModel();
+            }
+        }
+        if (!cropped.isEmpty()) {
+            ip.clear();
+            ip.addAll(cropped);
+        }
+    }
+
     private void logImagesContents() {
         for (int i = 0; i < ip.size(); i++) {
             ij.process.ImageProcessor p = ip.get(i);
-            LOGGER.debug("  Imagem \"" + images.get(i).getName() + "\" (" + p.getWidth() + " colunas e " + p.getHeight() + " linhas): " + Arrays.toString(p.getFloatArray()));
+            LOGGER.debug("  Imagem \"" + images.get(i).getName() + "\" (" + p.getWidth() + " colunas e " + p.getHeight() + " linhas)");
         }
     }
 
@@ -138,59 +173,207 @@ public class ImageProcessor {
 
     }
 
-    public void debugContours() {
-        for (int i = 0; i < ip.size(); i++) {
-            ij.process.ImageProcessor p = ip.get(i);
-            LOGGER.debug("---------> VARRENDO PIXELS DE IMAGEM " + images.get(i).getName());
+    private void debugContours(List<Pixel> points, int originalWidth, int originalHeight, ColorModel m) {
+        int[][] arr = new int[originalWidth][originalHeight];
 
-            int[][] arr = p.getIntArray();
-            int y = 0;
-            int x = 0;
-            String[] line = new String[arr.length];
-            while (x < arr.length && y < arr[x].length) {
-                int pixel = arr[x][y];
+        Map<Pixel, Integer> pixelMap = new HashMap<>();
+        for (Pixel pix : points) {
+            pixelMap.put(new Pixel(pix.x, pix.y, -1), pix.val);
+        }
 
-                if (x == 0 && y == 287) {
-                    line[x] = "--> AQUIII!!!! <--";
-                } else if (pixel == -1 || pixel == 255) {
-                    line[x] = ".";
+        for (int x = 0; x < originalWidth; x++) {
+            for (int y = 0; y < originalHeight; y++) {
+                Pixel pix = new Pixel(x, y, -1);
+                if (pixelMap.containsKey(pix)) {
+                    arr[x][y] = pixelMap.get(pix);
                 } else {
-                    line[x] = " ";
-                }
-
-                x++;
-                if (x == arr.length - 1) {
-                    x = 0;
-                    y++;
-                    System.out.println(Arrays.toString(line).replace(",", ""));
+                    arr[x][y] = 0;
                 }
             }
-            LOGGER.debug("Encontrando pontos mais significativos de imagem " + images.get(i).getName());
-            getPrincipalPoints(p);
+        }
+
+        LOGGER.debug("Pixels : " + points);
+        debugContours(arr, m);
+    }
+
+    private void debugContours(int[][] arr, ColorModel m) {
+        int y = 0;
+        int x = 0;
+        String[] line = new String[arr.length];
+        while (x < arr.length && y < arr[x].length) {
+            int pixel = arr[x][y];
+
+            if (isPixelBlackOrWhite(pixel)) {
+                line[x] = "O";
+            } else {
+                line[x] = " ";
+            }
+
+            x++;
+            if (x == arr.length) {
+                x = 0;
+                y++;
+                LOGGER.debug(Arrays.toString(line).replace(",", ""));
+            }
         }
     }
 
-    private List<Point2D> getPrincipalPoints(ij.process.ImageProcessor p) {
-        List<Point2D> contourCoordinates = new ArrayList<>();
+    public List<TrianglePrincipalPoints> getPrincipalPoints(boolean debug) {
+        List<TrianglePrincipalPoints> res = new ArrayList<>();
 
-        int[][] arr = p.getIntArray();
-        for (int x = 0; x < arr.length; x++) {
-            for (int y = 0; y < arr[x].length; y++) {
-                int pixel = arr[x][y];
-                if (pixel == -1 || pixel == 255) {
-                    contourCoordinates.add(new Point2D(x, y));
+        for (int i = 0; i < ip.size(); i++) {
+            ij.process.ImageProcessor imgProc = ip.get(i);
+            List<Pixel> contourCoordinates = getEdgesPixels(imgProc);
+            List<Pixel> extractedPoints = new ArrayList<>();
+
+            BBox bbox = getBoundingBox(imgProc);
+
+            List<Pixel> maxXPixels = contourCoordinates.stream().filter(p -> p.x >= bbox.getMaxX()).collect(Collectors.toList());
+            List<Pixel> maxYPixels = contourCoordinates.stream().filter(p -> p.y >= bbox.getMaxY()).collect(Collectors.toList());
+            List<Pixel> minXPixels = contourCoordinates.stream().filter(p -> p.x <= bbox.getMinX()).collect(Collectors.toList());
+            List<Pixel> minYPixels = contourCoordinates.stream().filter(p -> p.y <= bbox.getMinY()).collect(Collectors.toList());
+
+            Pixel maxXmaxYPixel = maxXPixels.stream().sorted((p1, p2) -> p2.y - p1.y).findFirst().orElseThrow(ImageIncompatibleException::new);
+            if (maxXmaxYPixel != null) {
+                extractedPoints.add(maxXmaxYPixel);
+            }
+            Pixel maxXminYPixel = maxXPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p1.y - p2.y).findFirst().orElse(null);
+            if (maxXminYPixel != null) {
+                extractedPoints.add(maxXminYPixel);
+            }
+
+            Pixel minXmaxYPixel = minXPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p2.y - p1.y).findFirst().orElse(null);
+            if (minXmaxYPixel != null) {
+                extractedPoints.add(minXmaxYPixel);
+            }
+            Pixel minXminYPixel = minXPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p1.y - p2.y).findFirst().orElse(null);
+            if (minXminYPixel != null) {
+                extractedPoints.add(minXminYPixel);
+            }
+
+            Pixel maxYmaxXPixel = maxYPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p2.x - p1.x).findFirst().orElse(null);
+            if (maxYmaxXPixel != null) {
+                extractedPoints.add(maxYmaxXPixel);
+            }
+            Pixel maxYminXPixel = maxYPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p1.x - p2.x).findFirst().orElse(null);
+            if (maxYminXPixel != null) {
+                extractedPoints.add(maxYminXPixel);
+            }
+
+            Pixel minYmaxXPixel = minYPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p2.x - p1.x).findFirst().orElse(null);
+            if (minYmaxXPixel != null) {
+                extractedPoints.add(minYmaxXPixel);
+            }
+            Pixel minYminXPixel = minYPixels.stream().filter(p -> !extractedPoints.contains(p)).sorted((p1, p2) -> p1.x - p2.x).findFirst().orElse(null);
+            if (minYminXPixel != null) {
+                extractedPoints.add(minYminXPixel);
+            }
+
+            //remove os pares proximos de pontos de cada axis
+            double tolerancePercentage = 0.03;
+            int tolerance = getDistanceTolerance(imgProc.getWidth(), imgProc.getHeight(), tolerancePercentage);
+            if ((maxXmaxYPixel != null && maxXminYPixel != null) && getDistance(maxXmaxYPixel, maxXminYPixel) <= tolerance) {
+                extractedPoints.remove(maxXminYPixel);
+            }
+            if ((minXmaxYPixel != null && minXminYPixel != null) && getDistance(minXmaxYPixel, minXminYPixel) <= tolerance) {
+                extractedPoints.remove(minXminYPixel);
+            }
+            if ((maxYmaxXPixel != null && maxYminXPixel != null) && getDistance(maxYmaxXPixel, maxYminXPixel) <= tolerance) {
+                extractedPoints.remove(maxYminXPixel);
+            }
+            if ((minYmaxXPixel != null && minYminXPixel != null) && getDistance(minYmaxXPixel, minYminXPixel) <= tolerance) {
+                extractedPoints.remove(minYminXPixel);
+            }
+
+            List<Pixel> finalPixels = new ArrayList<>(extractedPoints);
+            while (finalPixels.size() > 3) {
+                tolerance = getDistanceTolerance(imgProc.getWidth(), imgProc.getHeight(), tolerancePercentage);
+                for (int u = 0; u < extractedPoints.size() && finalPixels.size() > 3; u++) {
+                    Pixel p1 = extractedPoints.get(u);
+                    for (int q = 0; q < extractedPoints.size() && finalPixels.size() > 3; q++) {
+                        Pixel p2 = extractedPoints.get(q);
+                        if (p1 == p2) {
+                            continue;
+                        }
+                        if (getDistance(p1, p2) <= tolerance) {
+                            finalPixels.remove(p2);
+                        }
+                    }
                 }
+
+                tolerancePercentage += 0.01;
+            }
+
+            int initialSize = contourCoordinates.size();
+            int actualSize = finalPixels.size();
+
+            if (actualSize != 3) {
+                LOGGER.warn("Não foi possível extrair os 3 pontos principais da imagem " + images.get(i).getName() + ". Pontos encontrados: " + actualSize);
+                continue;
+            }
+
+            LOGGER.info("Imagem " + images.get(i) + " diminuida de " + initialSize + " para " + actualSize);
+
+            TrianglePrincipalPoints principalPoints = new TrianglePrincipalPoints();
+            List<Pixel> normalizedPixels = new ArrayList<>();
+            for (Pixel pixel : finalPixels) {
+                Pixel normalized = normalizePixels(imgProc.getWidth(), imgProc.getHeight(), pixel);
+                normalizedPixels.add(normalized);
+                principalPoints.addPixel(normalized);
+            }
+
+            Dimension d = getNormalizedDimensions(imgProc.getWidth(), imgProc.getHeight());
+            res.add(principalPoints);
+            if (debug) {
+                debugContours(normalizedPixels, d.X, d.Y, imgProc.getCurrentColorModel());
             }
         }
-        //ponto inferior esquerdo - deveria ser o primeiro pixel encontrado na figura (lembrando da origem considerado em imeagens: superior esquerdo)
-        //isso acontece devido ao calculo de peso das coordenadas
-        Point2D minXminY = contourCoordinates.stream().sorted(Point2D::minXminYComparator).findFirst().get();
-        //ponto inferior direito
-        Point2D maxXmaxY = contourCoordinates.stream().sorted(Point2D::compareToReverse).findFirst().get();
-        System.out.println(minXminY);
-        System.out.println(maxXmaxY);
+        return res;
+    }
 
-        return null;
+    private int getDistanceTolerance(int width, int height, double tolerancePercentage) {
+        int toleranceX = (int) (width * tolerancePercentage);
+        int toleranceY = (int) (height * tolerancePercentage);
+        return toleranceX + toleranceY;
+    }
+
+    private Pixel normalizePixels(int originalWidth, int originalHeight, Pixel originalPixel) {
+        Pixel res = null;
+        if (originalWidth != BASE_DIMENSIONS.X) {
+            Dimension d = getNormalizedDimensions(originalWidth, originalHeight);
+            double x = (double) originalPixel.x;
+            double y = (double) originalPixel.y;
+            double ratioX = (double) d.X / (double) originalWidth;
+            x *= ratioX;
+
+            double ratioY = (double) d.Y / (double) originalHeight;
+            y *= ratioY;
+            res = new Pixel((int) x, (int) y, originalPixel.val);
+        } else {
+            res = originalPixel;
+        }
+        return res;
+    }
+
+    private Dimension getNormalizedDimensions(int originalWidth, int originalHeight) {
+        double aspect = (double) originalHeight / (double) originalWidth;
+        double newHeight = aspect * BASE_DIMENSIONS.X;
+        return new Dimension(BASE_DIMENSIONS.X, (int) newHeight);
+    }
+
+    /**
+     * Calcula a distancia entre dois pixels
+     *
+     * @param p1
+     * @param p2
+     * @return true se a distancia entre os dois pixels é menor ou igual a distancia minima, false caso contrário
+     */
+    private int getDistance(Pixel p1, Pixel p2) {
+        int dx = p1.x - p2.x;
+        int dy = p1.y - p2.y;
+        int distance = dx + dy;
+
+        return Math.abs(distance);
     }
 
     /**
@@ -200,54 +383,25 @@ public class ImageProcessor {
      *
      * @return {@link BBox} de todas as imagens carregadas através do metodo {@link #loadImages(File[])}
      */
-    public List<BBox> getNormalizedBoundingBoxes() {
-        List<BBox> res = new ArrayList<>();
-        //para cada imagem...
+    private BBox getBoundingBox(ij.process.ImageProcessor imgProc) {
+        List<Pixel> edgesPixels = getEdgesPixels(imgProc);
+        List<Integer> xList = edgesPixels.stream().map(p -> p.x).collect(Collectors.toList());
+        List<Integer> yList = edgesPixels.stream().map(p -> p.y).collect(Collectors.toList());
 
-        for (int i = 0; i < ip.size(); i++) {
-            try {
-                ij.process.ImageProcessor p = ip.get(i);
-                Map<Integer, List<Integer>> edgesCoords = getEdgesCoordinates(p);
-                int minX = edgesCoords.keySet().stream().sorted().findFirst().orElseThrow(ImageIncompatibleException::new);
-                int maxX = edgesCoords.keySet().stream().sorted((o1, o2) -> o2 - o1).findFirst().orElseThrow(ImageIncompatibleException::new);
-
-                //encontra o Y
-                List<Integer> yArray = new ArrayList<>();
-                for (List<Integer> l : edgesCoords.values()) {
-                    yArray.addAll(l);
-                }
-                int minY = yArray.stream().sorted().findFirst().orElseThrow(ImageIncompatibleException::new);
-                int maxY = yArray.stream().sorted((o1, o2) -> o2 - o1).findFirst().orElseThrow(ImageIncompatibleException::new);
-
-                //normaliza os min/max x/y
-                if (p.getWidth() != BASE_DIMENSIONS.X) {
-                    double ratio = BASE_DIMENSIONS.X / p.getWidth();
-                    minX *= ratio;
-                    maxX *= ratio;
-                }
-                if (p.getHeight() != BASE_DIMENSIONS.Y) {
-                    double ratio = BASE_DIMENSIONS.Y / p.getHeight();
-                    minY *= ratio;
-                    maxY *= ratio;
-                }
-
-                LOGGER.debug(images.get(i).getName() + " minX: " + minX + " / maxX: " + maxX + " / maxY: " + maxY + " / minY: " + minY);
-                res.add(new BBox(maxX, minX, maxY, minY));
-            } catch (ImageIncompatibleException e) {
-                LOGGER.error("Bounding box de imagem " + images.get(i) + " não pôde ser extraído.");
-            }
-        }
-        return res;
+        int minX = xList.stream().sorted().findFirst().orElseThrow(ImageIncompatibleException::new);
+        int maxX = xList.stream().sorted((x1, x2) -> x2 - x1).findFirst().orElseThrow(ImageIncompatibleException::new);
+        int minY = yList.stream().sorted().findFirst().orElseThrow(ImageIncompatibleException::new);
+        int maxY = yList.stream().sorted((y1, y2) -> y2 - y1).findFirst().orElseThrow(ImageIncompatibleException::new);
+        return new BBox(maxX, minX, maxY, minY);
     }
 
     /**
      * Carrega um mapa com as coordenadas (x,y) de pixels relevantes (a.k.a pertencentes ao contorno do triangulo) da imagem.
      * Ou seja, todos as coordenadas presentes no mapa resultante são referentes a um pixel pertencente ao contorno do triângulo.
      */
-    private Map<Integer, List<Integer>> getEdgesCoordinates(ij.process.ImageProcessor p) {
+    private List<Pixel> getEdgesPixels(ij.process.ImageProcessor p) {
         LOGGER.debug("Extraindo coordenadas dos pixels mais relevantes (referentes ao contorno do triangulo)");
-        Map<Integer, List<Integer>> mappedCoords = new HashMap<>();
-
+        List<Pixel> res = new ArrayList<>();
         //para cada coluna (eixo x) da imagem atual...
         for (int x = 0; x < p.getWidth(); x++) {
             //para cada linha (eixo y) da imagem atual...
@@ -255,18 +409,16 @@ public class ImageProcessor {
                 int pixelVal = p.get(x, y);
                 // se entrar neste if, significa que este pixel faz parte de um contorno
                 //(parte branca da imagem tratada - olhe uma imagem tratada na pasta de imagens tratadas para mais entendimento)
-                if (pixelVal >= (p.getMax() - 5)) {
-                    List<Integer> yCoords = mappedCoords.get(x);
-                    if (yCoords == null) {
-                        yCoords = new ArrayList<>();
-                    } else {
-                        yCoords.add(y);
-                    }
-                    mappedCoords.put(x, yCoords);
+                if (isPixelBlackOrWhite(pixelVal)) {
+                    res.add(new Pixel(x, y, pixelVal));
                 }
             }
         }
-        return mappedCoords;
+        return res;
+    }
+
+    private boolean isPixelBlackOrWhite(int pixelVal) {
+        return pixelVal == WHITE_PIXEL_VAL || pixelVal == BLACK_PIXEL_VAL;
     }
 
 }
