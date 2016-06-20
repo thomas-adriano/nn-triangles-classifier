@@ -16,29 +16,40 @@ import java.util.*;
 //acontece no processamento delas. Para criar mais deve-se usar o metodo ImageProcessor.saveImages();
 
 
-//TODO: criar mais arquivos de imagem exemplos (nao precisam ser 28x28, seria até melhor que fossem de outras dimensões)
 //TODO: se a acertividade da rede neural estiver baixa, calibra-la para ter uma boa taxa de acertividade
 public class Application {
     private static final Logger LOGGER = LogManager.getLogger();
-    public static final File IMAGES_OUTPUT_DIR = new File("src/main/resources/processedImages");
-    public static final File EQUILATERAL_TRIANGLES_OUTPUT_DIR = new File(IMAGES_OUTPUT_DIR, "equilateral");
-    public static final File SCALENE_TRIANGLES_OUTPUT_DIR = new File(IMAGES_OUTPUT_DIR, "scalene");
-    public static final File ISOSCELES_TRIANGLES_OUTPUT_DIR = new File(IMAGES_OUTPUT_DIR, "isosceles");
-    public static final String IMAGES_PATH = "/images";
-    public static final String EQUILATERAL_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/equilateral";
-    public static final String ISOSCELES_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/isosceles";
-    public static final String SCALENE_TRIANGLES_IMAGE_PATH = IMAGES_PATH + "/scalene";
+
+    public static final File TRAINING_IMAGES_OUTPUT_DIR = new File("src/main/resources/training/processedImages");
+    public static final File TRAINING_EQUILATERAL_TRIANGLES_OUTPUT_DIR = new File(TRAINING_IMAGES_OUTPUT_DIR, "equilateral");
+    public static final File TRAINING_SCALENE_TRIANGLES_OUTPUT_DIR = new File(TRAINING_IMAGES_OUTPUT_DIR, "scalene");
+    public static final File TRAINING_ISOSCELES_TRIANGLES_OUTPUT_DIR = new File(TRAINING_IMAGES_OUTPUT_DIR, "isosceles");
+    public static final File CLASSIFICATION_IMAGES_OUTPUT_DIR = new File("src/main/resources/training/processedImages");
+    public static final File CLASSIFICATION_EQUILATERAL_TRIANGLES_OUTPUT_DIR = new File(TRAINING_IMAGES_OUTPUT_DIR, "equilateral");
+    public static final File CLASSIFICATION_SCALENE_TRIANGLES_OUTPUT_DIR = new File(TRAINING_IMAGES_OUTPUT_DIR, "scalene");
+    public static final File CLASSIFICATION_ISOSCELES_TRIANGLES_OUTPUT_DIR = new File(TRAINING_IMAGES_OUTPUT_DIR, "isosceles");
+
+    public static final String TRAINING_IMAGES_PATH = "/training/images";
+    public static final String TRAINING_EQUILATERAL_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/equilateral";
+    public static final String TRAINING_ISOSCELES_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/isosceles";
+    public static final String TRAINING_SCALENE_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/scalene";
+    public static final String CLASSIFICATION_IMAGES_PATH = "/classification/images";
+    public static final String CLASSIFICATION_EQUILATERAL_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/equilateral";
+    public static final String CLASSIFICATION_ISOSCELES_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/isosceles";
+    public static final String CLASSIFICATION_SCALENE_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/scalene";
+
+    public static final File TRAINING_CSV = new File("training.csv");
+    public static final File CLASSIFICATION_CSV = new File("classification.csv");
 
     public static void main(String[] args) {
         long init = System.currentTimeMillis();
         LOGGER.info("Iniciando execução...");
 
-        Map<TriangleTypes, List<TrianglePrincipalPoints>> trainingData = loadTrainingData();
-        File csvFile = new File("out.csv");
-        writeToCSV(trainingData, csvFile);
+//        createCSVFiles();  linha comentada pq os arquivos CSV de treinamento já estão criados
 
         try (NeuralNetwork nn = new NeuralNetwork()) {
-            nn.train(csvFile);
+            nn.train(TRAINING_CSV);
+            nn.predict(CLASSIFICATION_CSV);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -48,7 +59,20 @@ public class Application {
         LOGGER.info("Tempo de execução total: " + elapsed + " segundos.");
     }
 
-    public static Map<TriangleTypes, List<TrianglePrincipalPoints>> loadTrainingData() {
+    private enum DataType {
+        TRAINING, CLASSIFICATION
+    }
+
+    private static void createCSVFiles() {
+        Map<TriangleTypes, List<TrianglePrincipalPoints>> trainingData = loadData(DataType.TRAINING);
+        writeToCSV(trainingData, TRAINING_CSV);
+
+        Map<TriangleTypes, List<TrianglePrincipalPoints>> classificationData = loadData(DataType.CLASSIFICATION);
+        writeToCSV(classificationData, CLASSIFICATION_CSV);
+    }
+
+
+    private static Map<TriangleTypes, List<TrianglePrincipalPoints>> loadData(DataType dt) {
         TrainingDataProvider tp = new TrainingDataProvider(new ImageProcessor());
 
         List<File> eqTriangles = new ArrayList<>();
@@ -56,9 +80,9 @@ public class Application {
         List<File> scaTriangles = new ArrayList<>();
 
         //carrega todos os arquivos presentes nas pastas de imagens e adiciona em sua respectiva colecao
-        eqTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.EQUILATERAL))));
-        isoTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.ISOSCELES))));
-        scaTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.SCALENE))));
+        eqTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.EQUILATERAL, dt))));
+        isoTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.ISOSCELES, dt))));
+        scaTriangles.addAll(Arrays.asList(ResourceLoader.getResources(getTriangleImageOriginDirByType(TriangleTypes.SCALENE, dt))));
 
         Map<TriangleTypes, List<File>> trainintFiles = new HashMap<>();
         trainintFiles.put(TriangleTypes.EQUILATERAL, eqTriangles);
@@ -71,24 +95,24 @@ public class Application {
     public static final File getTriangleImageOutputDirByType(TriangleTypes t) {
         switch (t) {
             case EQUILATERAL:
-                return EQUILATERAL_TRIANGLES_OUTPUT_DIR;
+                return TRAINING_EQUILATERAL_TRIANGLES_OUTPUT_DIR;
             case ISOSCELES:
-                return ISOSCELES_TRIANGLES_OUTPUT_DIR;
+                return TRAINING_ISOSCELES_TRIANGLES_OUTPUT_DIR;
             case SCALENE:
-                return SCALENE_TRIANGLES_OUTPUT_DIR;
+                return TRAINING_SCALENE_TRIANGLES_OUTPUT_DIR;
             default:
                 return null;
         }
     }
 
-    public static final String getTriangleImageOriginDirByType(TriangleTypes t) {
+    public static final String getTriangleImageOriginDirByType(TriangleTypes t, DataType dt) {
         switch (t) {
             case EQUILATERAL:
-                return EQUILATERAL_TRIANGLES_IMAGE_PATH;
+                return dt == DataType.TRAINING ? TRAINING_EQUILATERAL_TRIANGLES_IMAGE_PATH : CLASSIFICATION_EQUILATERAL_TRIANGLES_IMAGE_PATH;
             case ISOSCELES:
-                return ISOSCELES_TRIANGLES_IMAGE_PATH;
+                return dt == DataType.TRAINING ? TRAINING_ISOSCELES_TRIANGLES_IMAGE_PATH : CLASSIFICATION_ISOSCELES_TRIANGLES_IMAGE_PATH;
             case SCALENE:
-                return SCALENE_TRIANGLES_IMAGE_PATH;
+                return dt == DataType.TRAINING ? TRAINING_SCALENE_TRIANGLES_IMAGE_PATH : CLASSIFICATION_SCALENE_TRIANGLES_IMAGE_PATH;
             default:
                 return null;
         }

@@ -98,7 +98,7 @@ public class NeuralNetwork implements AutoCloseable {
         // normalize and denormalize your data.
 
         ReadCSV csv = new ReadCSV(predictData, false, CSVFormat.DECIMAL_POINT);
-        String[] line = new String[4];
+        String[] line = new String[7];
         NormalizationHelper helper = data.getNormHelper();
         MLData input = helper.allocateInputVector();
 
@@ -108,14 +108,18 @@ public class NeuralNetwork implements AutoCloseable {
             line[1] = csv.get(1);
             line[2] = csv.get(2);
             line[3] = csv.get(3);
-            String correct = csv.get(4);
+            line[4] = csv.get(4);
+            line[5] = csv.get(5);
+            line[6] = csv.get(6);
+            String correct = csv.get(6);
             helper.normalizeInputVector(line, input.getData(), false);
+
             MLData output = bestMethod.compute(input);
-            String irisChosen = helper.denormalizeOutputVectorToString(output)[0];
+            String triangleChoosen = helper.denormalizeOutputVectorToString(output)[0];
 
             result.append(Arrays.toString(line));
             result.append(" -> predicted: ");
-            result.append(irisChosen);
+            result.append(triangleChoosen);
             result.append("(correct: ");
             result.append(correct);
             result.append(")");
