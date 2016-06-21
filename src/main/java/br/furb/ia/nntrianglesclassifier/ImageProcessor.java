@@ -216,8 +216,8 @@ public class ImageProcessor {
         }
     }
 
-    public List<TrianglePrincipalPoints> getPrincipalPoints(boolean debug) {
-        List<TrianglePrincipalPoints> res = new ArrayList<>();
+    public List<TriangleSides> getPrincipalPoints(boolean debug) {
+        List<TriangleSides> res = new ArrayList<>();
         for (int i = 0; i < imageProcessors.size(); i++) {
             ij.process.ImageProcessor imgProc = imageProcessors.get(i);
             Set<Pixel> extractedPoints = new HashSet<>();
@@ -310,7 +310,7 @@ public class ImageProcessor {
 
             LOGGER.info("Imagem " + images.get(i) + " diminuida de " + initialSize + " para " + actualSize);
 
-            TrianglePrincipalPoints principalPoints = new TrianglePrincipalPoints();
+            TriangleSides principalPoints = new TriangleSides();
             List<Pixel> normalizedPixels = new ArrayList<>();
             for (Pixel pixel : finalPixels) {
                 Pixel normalized = normalizePixels(imgProc.getWidth(), imgProc.getHeight(), pixel);
@@ -370,11 +370,11 @@ public class ImageProcessor {
     }
 
     /**
-     * Calcula a distancia entre dois pixels
+     * Calcula a distancia entre dois distances
      *
      * @param p1
      * @param p2
-     * @return true se a distancia entre os dois pixels é menor ou igual a distancia minima, false caso contrário
+     * @return true se a distancia entre os dois distances é menor ou igual a distancia minima, false caso contrário
      */
     private int getDistance(Pixel p1, Pixel p2) {
         int dx = p1.x - p2.x;
@@ -403,11 +403,11 @@ public class ImageProcessor {
     }
 
     /**
-     * Carrega um mapa com as coordenadas (x,y) de pixels zrelevantes (a.k.a pertencentes ao contorno do triangulo) da imagem.
+     * Carrega um mapa com as coordenadas (x,y) de distances zrelevantes (a.k.a pertencentes ao contorno do triangulo) da imagem.
      * Ou seja, todos as coordenadas presentes no mapa resultante são referentes a um pixel pertencente ao contorno do triângulo.
      */
     private List<Pixel> getEdgesPixels(ij.process.ImageProcessor p) {
-        LOGGER.debug("Extraindo coordenadas dos pixels mais relevantes (referentes ao contorno do triangulo)");
+        LOGGER.debug("Extraindo coordenadas dos distances mais relevantes (referentes ao contorno do triangulo)");
         List<Pixel> res = new ArrayList<>();
         //para cada coluna (eixo x) da imagem atual...
         for (int x = 0; x < p.getWidth(); x++) {

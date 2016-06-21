@@ -1,155 +1,99 @@
 package br.furb.ia.nntrianglesclassifier;
 
-import org.encog.ConsoleStatusReportable;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.encog.Encog;
 import org.encog.engine.network.activation.ActivationSigmoid;
-import org.encog.ml.MLRegression;
 import org.encog.ml.data.MLData;
-import org.encog.ml.data.versatile.NormalizationHelper;
-import org.encog.ml.data.versatile.VersatileMLDataSet;
-import org.encog.ml.data.versatile.columns.ColumnDefinition;
-import org.encog.ml.data.versatile.columns.ColumnType;
-import org.encog.ml.data.versatile.sources.CSVDataSource;
-import org.encog.ml.data.versatile.sources.VersatileDataSource;
-import org.encog.ml.factory.MLMethodFactory;
-import org.encog.ml.model.EncogModel;
+import org.encog.ml.data.MLDataPair;
+import org.encog.ml.data.MLDataSet;
+import org.encog.ml.data.basic.BasicMLData;
+import org.encog.ml.data.basic.BasicMLDataPair;
+import org.encog.ml.data.basic.BasicMLDataSet;
 import org.encog.neural.networks.BasicNetwork;
 import org.encog.neural.networks.layers.BasicLayer;
-import org.encog.neural.networks.training.propagation.back.Backpropagation;
-import org.encog.util.csv.CSVFormat;
-import org.encog.util.csv.ReadCSV;
-import org.encog.util.simple.EncogUtility;
+import org.encog.neural.networks.training.propagation.resilient.ResilientPropagation;
 
 import java.io.File;
-import java.util.Arrays;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by Thomas.Adriano on 09/06/2016.
  */
 public class NeuralNetwork implements AutoCloseable {
 
-    private VersatileMLDataSet data;
-    private MLRegression bestMethod;
+    private BasicNetwork network;
+    private static final Logger LOGGER = LogManager.getLogger();
+
+    private BasicMLDataSet readCSV(File f) {
+        List<MLDataPair> dataPairs = new ArrayList<>();
+        try (CSVParser p = CSVParser.parse(f, StandardCharsets.UTF_8, org.apache.commons.csv.CSVFormat.DEFAULT)) {
+            for (CSVRecord rec : p.getRecords()) {
+                double[] inputs = new double[4];
+                TriangleTypes t = TriangleTypes.fromChar(rec.get(3).charAt(0));
+                double[] ideal = new double[]{t.getDoubleValue()};
+
+                for (int i = 0; i < rec.size() - 1 /* subtrai a coluna resultado*/; i++) {
+                    inputs[i] =Double.valueOf(rec.get(i));
+                }
+
+                BasicMLData inp = new BasicMLData(inputs);
+                BasicMLData ide = new BasicMLData(ideal);
+                dataPairs.add(new BasicMLDataPair(inp, ide));
+            }
+
+        } catch (IOException | NumberFormatException e) {
+            throw new RuntimeException("Não foi possível parsear o conteudo do arquivo csv " + f, e);
+        }
+        return new BasicMLDataSet(dataPairs);
+    }
 
     public void train(final File trainingData) {
-        VersatileDataSource ds = new CSVDataSource(trainingData, true, CSVFormat.DECIMAL_POINT);
-        // Define the format of the data file.
-        // This area will change, depending on the columns and
-        // format of the file that you are trying to model.
-        data = new VersatileMLDataSet(ds);
-        data.defineSourceColumn("p1x", 0, ColumnType.continuous);
-        data.defineSourceColumn("p1y", 1, ColumnType.continuous);
-        data.defineSourceColumn("p2x", 2, ColumnType.continuous);
-        data.defineSourceColumn("p2y", 3, ColumnType.continuous);
-        data.defineSourceColumn("p3x", 4, ColumnType.continuous);
-        data.defineSourceColumn("p3y", 5, ColumnType.continuous);
+        MLDataSet data = readCSV(trainingData);
+        // multilayered perceptron
+        network = new BasicNetwork();
+        network.addLayer(new BasicLayer(null, true, data.getInputSize()));
+        network.addLayer(new BasicLayer(new ActivationSigmoid(), true, 8));
+        network.addLayer(new BasicLayer(new ActivationSigmoid(), true, 8));
+        network.addLayer(new BasicLayer(new ActivationSigmoid(), false, 1));
+        network.getStructure().finalizeStructure();
+        network.reset();
 
-        // Define the column that we are trying to predict.
-        ColumnDefinition outputColumn = data.defineSourceColumn("type", 6,
-                ColumnType.nominal);
+        ResilientPropagation train = new ResilientPropagation(network, data);
 
-        // Analyze the data, determine the min/max/mean/sd of every column.
-        data.analyze();
+        int epoch = 1;
 
-        // Map the prediction column to the output of the model, and all
-        // other columns to the input.
-        data.defineSingleOutputOthersInput(outputColumn);
+        do {
+            train.iteration();
+            LOGGER.debug(("Epoch #" + epoch + " Error:" + train.getError()));
+            epoch++;
+        } while (epoch < 500);
 
-
-        // multilayered perceptron back propagation test
-        BasicNetwork bn = new BasicNetwork();
-        bn.addLayer(new BasicLayer(null, true, 6));
-        bn.addLayer(new BasicLayer(new ActivationSigmoid(), true, 8));
-        bn.addLayer(new BasicLayer(new ActivationSigmoid(), false, 3));
-
-        bn.getStructure().finalizeStructure();
-        bn.reset();
-
-        Backpropagation bp = new Backpropagation(bn, data);
-
-        for (int epoch = 1; epoch <= 50; epoch++) {
-            bp.iteration();
+        // test the neural network
+        LOGGER.debug(("Neural Network Results:"));
+        for (MLDataPair pair : data) {
+            final MLData output = network.compute(pair.getInput());
+            LOGGER.debug((pair.getInput().getData(0) + "," + pair.getInput().getData(1) + "," + pair.getInput().getData(2)
+                    + ", actual=" + output.getData(0) + ",ideal=" + pair.getIdeal().getData(0)));
         }
 
-        bp.finishTraining();
-        //
-
-
-        // Create feedforward neural network as the model type. MLMethodFactory.TYPE_FEEDFORWARD.
-        // You could also other model types, such as:
-        // MLMethodFactory.SVM:  Support Vector Machine (SVM)
-        // MLMethodFactory.TYPE_RBFNETWORK: RBF Neural Network
-        // MLMethodFactor.TYPE_NEAT: NEAT Neural Network
-        // MLMethodFactor.TYPE_PNN: Probabilistic Neural Network
-        EncogModel model = new EncogModel(data);
-        model.selectMethod(data, MLMethodFactory.TYPE_FEEDFORWARD);
-
-        // Send any output to the console.
-        model.setReport(new ConsoleStatusReportable());
-
-        // Now normalize the data.  Encog will automatically determine the correct normalization
-        // type based on the model you chose in the last step.
-        data.normalize();
-
-        // Hold back some data for a final validation.
-        // Shuffle the data into a random ordering.
-        // Use a seed of 1001 so that we always use the same holdback and will get more consistent results.
-        model.holdBackValidation(0.3, true, 1001);
-
-        // Choose whatever is the default training type for this model.
-        model.selectTrainingType(data);
-
-        // Use a 5-fold cross-validated train.  Return the best method found.
-        bestMethod = (MLRegression) model.crossvalidate(5, true);
-
-        // Display the training and validation errors.
-        System.out.println("Training error: " + EncogUtility.calculateRegressionError(bestMethod, model.getTrainingDataset()));
-        System.out.println("Validation error: " + EncogUtility.calculateRegressionError(bestMethod, model.getValidationDataset()));
-
-        // Display our normalization parameters.
-        NormalizationHelper helper = data.getNormHelper();
-        System.out.println(helper.toString());
-
-        // Display the final model.
-        System.out.println("Final model: " + bestMethod);
+        LOGGER.debug(("Quantidade de épocas: " + epoch));
+        LOGGER.debug(("Taxa de erro atingida: " + train.getError()));
+        LOGGER.debug(("Quantidade de imagens utilizadas no treino: " + data.size()));
     }
 
     public void predict(File predictData) {
-        // Loop over the entire, original, dataset and feed it through the model.
-        // This also shows how you would process new data, that was not part of your
-        // training set.  You do not need to retrain, simply use the NormalizationHelper
-        // class.  After you train, you can save the NormalizationHelper to later
-        // normalize and denormalize your data.
-
-        ReadCSV csv = new ReadCSV(predictData, false, CSVFormat.DECIMAL_POINT);
-        String[] line = new String[7];
-        NormalizationHelper helper = data.getNormHelper();
-        MLData input = helper.allocateInputVector();
-
-        while (csv.next()) {
-            StringBuilder result = new StringBuilder();
-            line[0] = csv.get(0);
-            line[1] = csv.get(1);
-            line[2] = csv.get(2);
-            line[3] = csv.get(3);
-            line[4] = csv.get(4);
-            line[5] = csv.get(5);
-            line[6] = csv.get(6);
-            String correct = csv.get(6);
-            helper.normalizeInputVector(line, input.getData(), false);
-
-            MLData output = bestMethod.compute(input);
-            String triangleChoosen = helper.denormalizeOutputVectorToString(output)[0];
-
-            result.append(Arrays.toString(line));
-            result.append(" -> predicted: ");
-            result.append(triangleChoosen);
-            result.append("(correct: ");
-            result.append(correct);
-            result.append(")");
-
-            System.out.println(result.toString());
+        MLDataSet data = readCSV(predictData);
+        for (MLDataPair pair : data) {
+            MLData output = network.compute(pair.getInput());
+            LOGGER.debug("expected: " + pair.getIdeal().getData(0) + ", predicted: " + output.getData(0));
         }
+
     }
 
     @Override

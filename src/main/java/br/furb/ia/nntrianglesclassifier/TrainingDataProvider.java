@@ -21,11 +21,11 @@ public class TrainingDataProvider {
         this.imgProcessor = ip;
     }
 
-    public Map<TriangleTypes, List<TrianglePrincipalPoints>> processAndGetExamples(Map<TriangleTypes, List<File>> e, boolean debug) {
+    public Map<TriangleTypes, List<TriangleSides>> processAndGetExamples(Map<TriangleTypes, List<File>> e, boolean debug) {
         LOGGER.info("Iniciando carregamento e preparação dos exemplos para treinamento");
         int totalTrainingExamples = 0;
 
-        Map<TriangleTypes, List<TrianglePrincipalPoints>> examples = new HashMap<>();
+        Map<TriangleTypes, List<TriangleSides>> examples = new HashMap<>();
         for (Map.Entry<TriangleTypes, List<File>> entry : e.entrySet()) {
             LOGGER.info("Carregando e processando exemplos do tipo " + entry.getKey().toString());
             imgProcessor.loadImages(entry.getValue().toArray(new File[0]));

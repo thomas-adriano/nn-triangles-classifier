@@ -34,9 +34,9 @@ public class Application {
     public static final String TRAINING_ISOSCELES_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/isosceles";
     public static final String TRAINING_SCALENE_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/scalene";
     public static final String CLASSIFICATION_IMAGES_PATH = "/classification/images";
-    public static final String CLASSIFICATION_EQUILATERAL_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/equilateral";
-    public static final String CLASSIFICATION_ISOSCELES_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/isosceles";
-    public static final String CLASSIFICATION_SCALENE_TRIANGLES_IMAGE_PATH = TRAINING_IMAGES_PATH + "/scalene";
+    public static final String CLASSIFICATION_EQUILATERAL_TRIANGLES_IMAGE_PATH = CLASSIFICATION_IMAGES_PATH + "/equilateral";
+    public static final String CLASSIFICATION_ISOSCELES_TRIANGLES_IMAGE_PATH = CLASSIFICATION_IMAGES_PATH + "/isosceles";
+    public static final String CLASSIFICATION_SCALENE_TRIANGLES_IMAGE_PATH = CLASSIFICATION_IMAGES_PATH + "/scalene";
 
     public static final File TRAINING_CSV = new File("training.csv");
     public static final File CLASSIFICATION_CSV = new File("classification.csv");
@@ -45,7 +45,7 @@ public class Application {
         long init = System.currentTimeMillis();
         LOGGER.info("Iniciando execução...");
 
-        createCSVFiles();  //linha comentada pq os arquivos CSV de treinamento já estão criados
+//        createCSVFiles();  //linha comentada pq os arquivos CSV de treinamento já estão criados
 
         try (NeuralNetwork nn = new NeuralNetwork()) {
             nn.train(TRAINING_CSV);
@@ -64,15 +64,15 @@ public class Application {
     }
 
     private static void createCSVFiles() {
-        Map<TriangleTypes, List<TrianglePrincipalPoints>> trainingData = loadData(DataType.TRAINING);
+        Map<TriangleTypes, List<TriangleSides>> trainingData = loadData(DataType.TRAINING);
         writeToCSV(trainingData, TRAINING_CSV);
 
-//        Map<TriangleTypes, List<TrianglePrincipalPoints>> classificationData = loadData(DataType.CLASSIFICATION);
-//        writeToCSV(classificationData, CLASSIFICATION_CSV);
+        Map<TriangleTypes, List<TriangleSides>> classificationData = loadData(DataType.CLASSIFICATION);
+        writeToCSV(classificationData, CLASSIFICATION_CSV);
     }
 
 
-    private static Map<TriangleTypes, List<TrianglePrincipalPoints>> loadData(DataType dt) {
+    private static Map<TriangleTypes, List<TriangleSides>> loadData(DataType dt) {
         TrainingDataProvider tp = new TrainingDataProvider(new ImageProcessor());
 
         List<File> eqTriangles = new ArrayList<>();
@@ -118,30 +118,24 @@ public class Application {
         }
     }
 
-    public static void writeToCSV(Map<TriangleTypes, List<TrianglePrincipalPoints>> trainData, File csvDestPath) {
-        String[] csvHeaders = new String[]{"p1x", "p1y", "p2x", "p2y", "p3x", "p3y", "type"};
-
+    public static void writeToCSV(Map<TriangleTypes, List<TriangleSides>> trainData, File csvDestPath) {
         Collection<String[]> csvEntries = new ArrayList<>();
 
-        for (Map.Entry<TriangleTypes, List<TrianglePrincipalPoints>> e : trainData.entrySet()) {
-            for (TrianglePrincipalPoints p : e.getValue()) {
+        for (Map.Entry<TriangleTypes, List<TriangleSides>> e : trainData.entrySet()) {
+            for (TriangleSides p : e.getValue()) {
                 int actualIndex = 0;
-                String[] line = new String[7];
-                for (Pixel pixel : p.pixels()) {
-                    if (pixel != null) {
-                        for (int coord : pixel.values()) {
-                            line[actualIndex] = String.valueOf(coord);
-                            actualIndex++;
-                        }
-                    }
+                String[] line = new String[4];
+                for (double distance : p.distances()) {
+                    line[actualIndex] = String.valueOf(distance);
+                    actualIndex++;
                 }
-                line[6] = String.valueOf(e.getKey().getCharValue());
+                line[3] = String.valueOf(e.getKey().getCharValue());
                 csvEntries.add(line);
             }
         }
 
         try (FileWriter fw = new FileWriter(csvDestPath)) {
-            try (CSVPrinter p = new CSVPrinter(fw, CSVFormat.DEFAULT.withHeader(csvHeaders))) {
+            try (CSVPrinter p = new CSVPrinter(fw, CSVFormat.DEFAULT)) {
                 p.printRecords(csvEntries);
             }
         } catch (IOException e) {
