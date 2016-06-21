@@ -30,28 +30,77 @@ public class NeuralNetwork implements AutoCloseable {
     private BasicNetwork network;
     private static final Logger LOGGER = LogManager.getLogger();
 
+    private double[] calcMeans(List<CSVRecord> recs) {
+        double[] accumulator = new double[3];
+        for (CSVRecord rec : recs) {
+            for (int i = 0; i < rec.size() - 1 /* subtrai a coluna resultado*/; i++) {
+                accumulator[i] += Double.valueOf(rec.get(i));
+            }
+        }
+        for (int i = 0; i < accumulator.length; i++) {
+            accumulator[i] /= recs.size();
+        }
+        return accumulator;
+    }
+
+    private double[] calcVariance(List<CSVRecord> recs, double[] means) {
+        double[] res = new double[3];
+
+        //calcula a diferenca de cada distancia com a distancia media
+        for (CSVRecord rec : recs) {
+            for (int i = 0; i < rec.size() - 1 /* subtrai a coluna resultado*/; i++) {
+                res[i] += Math.pow(Double.valueOf(rec.get(i)) - means[i], 2);
+            }
+        }
+        for (int i = 0; i < res.length; i++) {
+            res[i] = Math.sqrt(res[i] / recs.size());
+        }
+        return res;
+    }
+
     private BasicMLDataSet readCSV(File f) {
         List<MLDataPair> dataPairs = new ArrayList<>();
+
         try (CSVParser p = CSVParser.parse(f, StandardCharsets.UTF_8, org.apache.commons.csv.CSVFormat.DEFAULT)) {
-            for (CSVRecord rec : p.getRecords()) {
+            List<CSVRecord> records = p.getRecords();
+            double[] means = calcMeans(records);
+            double[] variances = calcVariance(records, means);
+
+            int anomalies = 0;
+            for (CSVRecord rec : records) {
                 double[] inputs = new double[4];
                 TriangleTypes t = TriangleTypes.fromChar(rec.get(3).charAt(0));
                 double[] ideal = new double[]{t.getDoubleValue()};
+                boolean anomalyFound = false;
 
                 for (int i = 0; i < rec.size() - 1 /* subtrai a coluna resultado*/; i++) {
-                    inputs[i] =Double.valueOf(rec.get(i));
+                    double val = Double.valueOf(rec.get(i));
+                    double variance = variances[i];
+                    double mean = means[i];
+                    double max = mean + variance;
+                    double min = mean - variance;
+                    if (val >= max || val <= min) {
+                        if (!anomalyFound) {
+                            anomalyFound = true;
+                            anomalies++;
+                            break;
+                        }
+                    }
+                    inputs[i] = val;
                 }
-
-                BasicMLData inp = new BasicMLData(inputs);
-                BasicMLData ide = new BasicMLData(ideal);
-                dataPairs.add(new BasicMLDataPair(inp, ide));
+                if (!anomalyFound) {
+                    BasicMLData inp = new BasicMLData(inputs);
+                    BasicMLData ide = new BasicMLData(ideal);
+                    dataPairs.add(new BasicMLDataPair(inp, ide));
+                }
             }
-
+            LOGGER.warn(anomalies + " anomalias encontradas. Estes registros não serão considerados no treinamento da rede neural.");
         } catch (IOException | NumberFormatException e) {
             throw new RuntimeException("Não foi possível parsear o conteudo do arquivo csv " + f, e);
         }
         return new BasicMLDataSet(dataPairs);
     }
+
 
     public void train(final File trainingData) {
         MLDataSet data = readCSV(trainingData);
