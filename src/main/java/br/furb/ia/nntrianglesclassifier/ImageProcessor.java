@@ -7,16 +7,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.imageio.ImageIO;
-import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 
@@ -31,8 +26,8 @@ public class ImageProcessor {
 
     private static final Logger LOGGER = LogManager.getLogger();
     private final List<File> images = new ArrayList<>();
-    private final List<ij.process.ImageProcessor> ip = new ArrayList<>();
-    private final List<ImageConverter> ic = new ArrayList<>();
+    private final List<ij.process.ImageProcessor> imageProcessors = new ArrayList<>();
+    private final List<ImageConverter> imageConverters = new ArrayList<>();
     private static final Dimension BASE_DIMENSIONS = new Dimension(50, 50);
     private static final int WHITE_PIXEL_VAL = 255;
 
@@ -49,8 +44,8 @@ public class ImageProcessor {
     public void loadImages(File[] imgs) {
         assert imgs != null;
         images.clear();
-        ip.clear();
-        ic.clear();
+        imageProcessors.clear();
+        imageConverters.clear();
 
         int counter = 0;
         for (File f : imgs) {
@@ -61,8 +56,8 @@ public class ImageProcessor {
             LOGGER.debug("Carregando imagem " + f.getName() + " - " + counter + " de " + imgs.length);
             ImagePlus imgP = IJ.openImage(f.getAbsolutePath());
             images.add(f);
-            ip.add(imgP.getProcessor());
-            ic.add(new ImageConverter(imgP));
+            imageProcessors.add(imgP.getProcessor());
+            imageConverters.add(new ImageConverter(imgP));
         }
         LOGGER.info(imgs.length + " imagens carregas");
     }
@@ -72,11 +67,11 @@ public class ImageProcessor {
      */
     public void resizeToWidth28() {
         int resized = 0;
-        for (int i = 0; i < ip.size(); i++) {
-            ij.process.ImageProcessor p = ip.get(i);
+        for (int i = 0; i < imageProcessors.size(); i++) {
+            ij.process.ImageProcessor p = imageProcessors.get(i);
             if (p.getHeight() > 28 || p.getWidth() > 28) {
                 LOGGER.debug("Redimensionando imagem " + images.get(i).getName() + " de " + p.getWidth() + " x " + p.getHeight() + " para 28 x 28...");
-                ip.set(i, p.resize(28));
+                imageProcessors.set(i, p.resize(28));
                 resized++;
             }
         }
@@ -88,39 +83,41 @@ public class ImageProcessor {
     }
 
     public void convertAllTo8BitGrayScale() {
-        for (int i = 0; i < ic.size(); i++) {
-            LOGGER.debug("Convertendo imagem " + images.get(i).getName() + " para 8bit gray scale - " + (i + 1) + " de " + ic.size());
-            ic.get(i).convertToGray8();
+        for (int i = 0; i < imageConverters.size(); i++) {
+            LOGGER.debug("Convertendo imagem " + images.get(i).getName() + " para 8bit gray scale - " + (i + 1) + " de " + imageConverters.size());
+            imageConverters.get(i).convertToGray8();
         }
-        LOGGER.info(ic.size() + " imagens convertidas para 8-bit gray scale");
+        LOGGER.info(imageConverters.size() + " imagens convertidas para 8-bit gray scale");
     }
 
     public void binarizeImage() {
-        for (int i = 0; i < ip.size(); i++) {
-            ij.process.ImageProcessor p = ip.get(i);
-            LOGGER.debug("Binarizando imagem " + images.get(i).getName() + " - " + (i + 1) + " de " + ic.size());
+        for (int i = 0; i < imageProcessors.size(); i++) {
+            ij.process.ImageProcessor p = imageProcessors.get(i);
+            LOGGER.debug("Binarizando imagem " + images.get(i).getName() + " - " + (i + 1) + " de " + imageConverters.size());
             p.setBinaryThreshold();
         }
-        LOGGER.info(ic.size() + " imagens binarizadas");
+        LOGGER.info(imageConverters.size() + " imagens binarizadas");
     }
 
     public void convertToEdges() {
-        for (int i = 0; i < ip.size(); i++) {
-            ij.process.ImageProcessor p = ip.get(i);
-            LOGGER.debug("Convertendo imagem " + images.get(i).getName() + " para edges - " + (i + 1) + " de " + ic.size());
+        for (int i = 0; i < imageProcessors.size(); i++) {
+            ij.process.ImageProcessor p = imageProcessors.get(i);
+            LOGGER.debug("Convertendo imagem " + images.get(i).getName() + " para edges - " + (i + 1) + " de " + imageConverters.size());
             p.findEdges();
         }
-        LOGGER.info(ip.size() + " imagens convertidas para edges");
+        LOGGER.info(imageProcessors.size() + " imagens convertidas para edges");
     }
 
     public void cropImagesToBBox() {
         List<ij.process.ImageProcessor> cropped = new ArrayList<>();
-        for (int i = 0; i < ip.size(); i++) {
-            ij.process.ImageProcessor p = ip.get(i);
+        List<ij.process.ImageProcessor> failed = new ArrayList<>();
+        for (int i = 0; i < imageProcessors.size(); i++) {
+            ij.process.ImageProcessor p = imageProcessors.get(i);
+            List<Pixel> contours = getEdgesPixels(p); //NÃO deve utilizar os contornos de contoursCoordinates
             int oldWidth = p.getWidth();
             int oldHeight = p.getHeight();
             try {
-                BBox box = getBoundingBox(p);
+                BBox box = getBoundingBox(contours);
                 LOGGER.debug("BBox " + box + " extraida de figura " + images.get(i).getName() + " (width: " + oldWidth + " height: " + oldHeight + "): " + box);
                 int newWidth = box.getMaxX() - box.getMinX();
                 int newHeigth = box.getMaxY() - box.getMinY();
@@ -130,12 +127,27 @@ public class ImageProcessor {
                 LOGGER.debug("  Imagem \"" + images.get(i).getName() + "\" \"cropeada\" de width/height: " + oldWidth + "/" + oldHeight + " para width/height: " + newWidth + "/" + newHeigth);
             } catch (ImageIncompatibleException e) {
                 LOGGER.warn("Não foi possível extrair BBox de imagem " + images.get(i).getName());
+                failed.add(p);
             }
         }
 
         if (!cropped.isEmpty()) {
-            ip.clear();
-            ip.addAll(cropped);
+            imageProcessors.clear();
+            imageProcessors.addAll(cropped);
+        }
+
+        if (!failed.isEmpty()) {
+            //remove os imageProcessors que falharam
+            for (int i = 0; i < imageProcessors.size(); i++) {
+                for (ij.process.ImageProcessor f : failed) {
+                    if (imageProcessors.get(i) == f) {
+                        imageProcessors.remove(i);
+                        imageConverters.remove(i);
+                        images.remove(i);
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -147,9 +159,9 @@ public class ImageProcessor {
                 throw new RuntimeException(e);
             }
         }
-        for (int i = 0; i < ip.size(); i++) {
+        for (int i = 0; i < imageProcessors.size(); i++) {
             File originImage = images.get(i);
-            BufferedImage bufferedImage = ip.get(i).getBufferedImage();
+            BufferedImage bufferedImage = imageProcessors.get(i).getBufferedImage();
             try {
                 ImageIO.write(bufferedImage, "jpg", new File(destDir, originImage.getName()));
             } catch (IOException e) {
@@ -157,11 +169,6 @@ public class ImageProcessor {
             }
         }
 
-    }
-
-    public static <T> Predicate<T> distinctByKey(Function<? super T, Object> keyExtractor) {
-        Map<Object, Boolean> seen = new ConcurrentHashMap<>();
-        return t -> seen.putIfAbsent(keyExtractor.apply(t), Boolean.TRUE) == null;
     }
 
     private void debugContours(List<Pixel> points, int originalWidth, int originalHeight) {
@@ -211,24 +218,22 @@ public class ImageProcessor {
 
     public List<TrianglePrincipalPoints> getPrincipalPoints(boolean debug) {
         List<TrianglePrincipalPoints> res = new ArrayList<>();
-
-        for (int i = 0; i < ip.size(); i++) {
-            ij.process.ImageProcessor imgProc = ip.get(i);
-            List<Pixel> contourCoordinates = getEdgesPixels(imgProc);
+        for (int i = 0; i < imageProcessors.size(); i++) {
+            ij.process.ImageProcessor imgProc = imageProcessors.get(i);
             Set<Pixel> extractedPoints = new HashSet<>();
-
+            List<Pixel> thisContours = getEdgesPixels(imgProc);
 
             List<Pixel> maxXPixels = null;
             List<Pixel> maxYPixels = null;
             List<Pixel> minXPixels = null;
             List<Pixel> minYPixels = null;
             try {
-                BBox bbox = getBoundingBox(imgProc);
+                BBox bbox = getBoundingBox(thisContours);
 
-                maxXPixels = contourCoordinates.stream().filter(p -> p.x >= bbox.getMaxX()).collect(Collectors.toList());
-                maxYPixels = contourCoordinates.stream().filter(p -> p.y >= bbox.getMaxY()).collect(Collectors.toList());
-                minXPixels = contourCoordinates.stream().filter(p -> p.x <= bbox.getMinX()).collect(Collectors.toList());
-                minYPixels = contourCoordinates.stream().filter(p -> p.y <= bbox.getMinY()).collect(Collectors.toList());
+                maxXPixels = thisContours.stream().filter(p -> p.x >= bbox.getMaxX()).collect(Collectors.toList());
+                maxYPixels = thisContours.stream().filter(p -> p.y >= bbox.getMaxY()).collect(Collectors.toList());
+                minXPixels = thisContours.stream().filter(p -> p.x <= bbox.getMinX()).collect(Collectors.toList());
+                minYPixels = thisContours.stream().filter(p -> p.y <= bbox.getMinY()).collect(Collectors.toList());
             } catch (ImageIncompatibleException e) {
                 LOGGER.warn("Não foi possível extrair BBox de imagem " + images.get(i).getName() + ", pulando imagem...");
                 continue;
@@ -295,7 +300,7 @@ public class ImageProcessor {
                 tolerancePercentage += 0.01;
             }
 
-            int initialSize = contourCoordinates.size();
+            int initialSize = thisContours.size();
             int actualSize = finalPixels.size();
 
             if (actualSize != 3) {
@@ -386,8 +391,7 @@ public class ImageProcessor {
      *
      * @return {@link BBox} de todas as imagens carregadas através do metodo {@link #loadImages(File[])}
      */
-    private BBox getBoundingBox(ij.process.ImageProcessor imgProc) {
-        List<Pixel> edgesPixels = getEdgesPixels(imgProc);
+    private BBox getBoundingBox(List<Pixel> edgesPixels) {
         List<Integer> xList = edgesPixels.stream().map(p -> p.x).collect(Collectors.toList());
         List<Integer> yList = edgesPixels.stream().map(p -> p.y).collect(Collectors.toList());
 
@@ -421,7 +425,6 @@ public class ImageProcessor {
     }
 
     private List<Pixel> getAllPixels(ij.process.ImageProcessor p) {
-        LOGGER.debug("Extraindo coordenadas dos pixels mais relevantes (referentes ao contorno do triangulo)");
         List<Pixel> res = new ArrayList<>();
         //para cada coluna (eixo x) da imagem atual...
         for (int x = 0; x < p.getWidth(); x++) {

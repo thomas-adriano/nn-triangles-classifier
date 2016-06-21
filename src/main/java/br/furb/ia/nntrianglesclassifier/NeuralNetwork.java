@@ -2,6 +2,7 @@ package br.furb.ia.nntrianglesclassifier;
 
 import org.encog.ConsoleStatusReportable;
 import org.encog.Encog;
+import org.encog.engine.network.activation.ActivationSigmoid;
 import org.encog.ml.MLRegression;
 import org.encog.ml.data.MLData;
 import org.encog.ml.data.versatile.NormalizationHelper;
@@ -12,6 +13,9 @@ import org.encog.ml.data.versatile.sources.CSVDataSource;
 import org.encog.ml.data.versatile.sources.VersatileDataSource;
 import org.encog.ml.factory.MLMethodFactory;
 import org.encog.ml.model.EncogModel;
+import org.encog.neural.networks.BasicNetwork;
+import org.encog.neural.networks.layers.BasicLayer;
+import org.encog.neural.networks.training.propagation.back.Backpropagation;
 import org.encog.util.csv.CSVFormat;
 import org.encog.util.csv.ReadCSV;
 import org.encog.util.simple.EncogUtility;
@@ -50,6 +54,26 @@ public class NeuralNetwork implements AutoCloseable {
         // Map the prediction column to the output of the model, and all
         // other columns to the input.
         data.defineSingleOutputOthersInput(outputColumn);
+
+
+        // multilayered perceptron back propagation test
+        BasicNetwork bn = new BasicNetwork();
+        bn.addLayer(new BasicLayer(null, true, 6));
+        bn.addLayer(new BasicLayer(new ActivationSigmoid(), true, 8));
+        bn.addLayer(new BasicLayer(new ActivationSigmoid(), false, 3));
+
+        bn.getStructure().finalizeStructure();
+        bn.reset();
+
+        Backpropagation bp = new Backpropagation(bn, data);
+
+        for (int epoch = 1; epoch <= 50; epoch++) {
+            bp.iteration();
+        }
+
+        bp.finishTraining();
+        //
+
 
         // Create feedforward neural network as the model type. MLMethodFactory.TYPE_FEEDFORWARD.
         // You could also other model types, such as:

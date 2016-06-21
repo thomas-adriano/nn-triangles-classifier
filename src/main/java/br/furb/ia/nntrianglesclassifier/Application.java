@@ -45,7 +45,7 @@ public class Application {
         long init = System.currentTimeMillis();
         LOGGER.info("Iniciando execução...");
 
-//        createCSVFiles();  linha comentada pq os arquivos CSV de treinamento já estão criados
+        createCSVFiles();  //linha comentada pq os arquivos CSV de treinamento já estão criados
 
         try (NeuralNetwork nn = new NeuralNetwork()) {
             nn.train(TRAINING_CSV);
@@ -67,8 +67,8 @@ public class Application {
         Map<TriangleTypes, List<TrianglePrincipalPoints>> trainingData = loadData(DataType.TRAINING);
         writeToCSV(trainingData, TRAINING_CSV);
 
-        Map<TriangleTypes, List<TrianglePrincipalPoints>> classificationData = loadData(DataType.CLASSIFICATION);
-        writeToCSV(classificationData, CLASSIFICATION_CSV);
+//        Map<TriangleTypes, List<TrianglePrincipalPoints>> classificationData = loadData(DataType.CLASSIFICATION);
+//        writeToCSV(classificationData, CLASSIFICATION_CSV);
     }
 
 
